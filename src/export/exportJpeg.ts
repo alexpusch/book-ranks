@@ -76,7 +76,7 @@ export async function exportJpeg(element: HTMLElement, allowPlaceholders = false
   const width = snapshot.scrollWidth;
   const height = snapshot.scrollHeight;
   // Keep the entire board within browser canvas limits without silently cropping.
-  const pixelRatio = Math.min(2, 16000 / Math.max(width, height));
+  const pixelRatio = Math.min(1, 16000 / Math.max(width, height));
   if (pixelRatio < 0.5 || width * height * pixelRatio ** 2 > 100_000_000) {
     throw new Error('This board is too large to export safely. Try fewer books or tiers.');
   }

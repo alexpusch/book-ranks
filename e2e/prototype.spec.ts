@@ -611,17 +611,17 @@ test('downloads a full tier-only JPEG with long labels and offscreen rows', asyn
         if (data[offset] < 160 && data[offset + 1] < 160 && data[offset + 2] < 160) {
           if (y < canvas.height / 2) darkTop++;
           else darkBottom++;
-          if (y >= canvas.height - 52 && y < canvas.height - 16 && x >= 16 && x < 600) footerPixels++;
+          if (y >= canvas.height - 26 && y < canvas.height - 8 && x >= 8 && x < 300) footerPixels++;
         }
       }
     }
     return { width: image.naturalWidth, height: image.naturalHeight, darkTop, darkBottom, footerPixels };
   }, bytes.toString('base64'));
-  expect(decoded.width).toBe(dimensions.width * 2);
-  expect(decoded.height).toBe(dimensions.height * 2);
-  expect(decoded.darkTop).toBeGreaterThan(1000);
-  expect(decoded.darkBottom).toBeGreaterThan(1000);
-  expect(decoded.footerPixels).toBeGreaterThan(30);
+  expect(decoded.width).toBe(dimensions.width);
+  expect(decoded.height).toBe(dimensions.height);
+  expect(decoded.darkTop).toBeGreaterThan(250);
+  expect(decoded.darkBottom).toBeGreaterThan(250);
+  expect(decoded.footerPixels).toBeGreaterThan(7);
   await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('app.png'), fullPage: true });
   await testInfo.attach('Exported full board', { path: file, contentType: 'image/jpeg' });

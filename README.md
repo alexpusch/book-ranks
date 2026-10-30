@@ -96,7 +96,7 @@ Malformed saved data is not overwritten automatically. A warning offers an expli
 
 Selected covers are preflighted at larger size with timeouts and reused as verified embedded bytes. Missing, invalid, blocked, or stalled artwork names the affected books and offers **Retry export** or **Export with placeholders for failed covers**. Display image errors independently show the bundled placeholder and an explicit retry.
 
-Large exports reduce pixel ratio to stay within canvas limits; excessively large boards fail visibly rather than being cropped. Browser memory limits can still cause export failures.
+Images export at 1x resolution (normally 1100px wide), with height determined by the board content. Large exports reduce pixel ratio to stay within canvas limits; excessively large boards fail visibly rather than being cropped. Browser memory limits can still cause export failures.
 
 ## Validation
 

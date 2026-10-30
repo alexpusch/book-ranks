@@ -255,7 +255,7 @@ for (const method of ['upload', 'paste'] as const) {
     const download = await downloaded;
     const file = testInfo.outputPath(`custom-${method}.jpg`);
     await download.saveAs(file);
-    expect((await jpegColors(page, await readFile(file))).red).toBeGreaterThan(20_000);
+    expect((await jpegColors(page, await readFile(file))).red).toBeGreaterThan(5_000);
     expect(externalRequests).toEqual([]);
   });
 }
@@ -276,8 +276,8 @@ test('exports distinct verified edition artwork, reuses bytes, and persists sele
   const bytes = await readFile(file);
   expect([...bytes.subarray(0, 3)]).toEqual([255, 216, 255]);
   const colors = await jpegColors(page, bytes);
-  expect(colors.red).toBeGreaterThan(20_000);
-  expect(colors.blue).toBeGreaterThan(20_000);
+  expect(colors.red).toBeGreaterThan(5_000);
+  expect(colors.blue).toBeGreaterThan(5_000);
   expect(largeImages).toHaveLength(2);
   expect(metadata).toHaveLength(0);
   await page.reload();
@@ -386,7 +386,7 @@ test('uses the search cover and loads additional editions only through the edito
   const file = testInfo.outputPath('automatic-edition.jpg');
   await (await downloaded).saveAs(file);
   const colors = await jpegColors(page, await readFile(file));
-  expect(colors.red).toBeGreaterThan(20_000);
+  expect(colors.red).toBeGreaterThan(5_000);
   expect(colors.blue).toBe(0);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0].coverSelection.editionId)).toBe('OL2M');
 });
@@ -453,5 +453,5 @@ test('late lookup results preserve placement and cannot change an export snapsho
   await (await downloaded).saveAs(file);
   const colors = await jpegColors(page, await readFile(file));
   expect(colors.red).toBe(0);
-  expect(colors.blue).toBeGreaterThan(20_000);
+  expect(colors.blue).toBeGreaterThan(5_000);
 });
