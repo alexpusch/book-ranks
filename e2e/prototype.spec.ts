@@ -561,27 +561,31 @@ test('downloads a full tier-only JPEG with long labels and offscreen rows', asyn
     board = moveBook(board, rankedIds[index], index === 29 ? 'tier-E' : 'tier-S');
   }
   await openBoard(page, board);
+  await page.goto('/?source=share&list=private');
   const exported = page.locator('.export-board');
   await expect(exported.locator('.book-card')).toHaveCount(30);
   await expect(exported.locator('.tier-row')).toHaveCount(6);
   expect(await exported.textContent()).not.toContain('Unranked secret');
   expect(await exported.textContent()).not.toContain('My book tier list');
   expect(await exported.textContent()).not.toContain('Book ranks');
-  await expect(exported.locator('header, footer')).toHaveCount(0);
+  await expect(exported.locator('header')).toHaveCount(0);
+  await expect(exported.locator('.export-url')).toHaveText(new URL('/', page.url()).href);
   expect(await exported.locator('button, select, textarea, input').count()).toBe(0);
   const margins = await exported.evaluate((element) => {
     const outer = element.getBoundingClientRect();
     const board = element.querySelector('.tier-board')!.getBoundingClientRect();
+    const footer = element.querySelector('.export-url')!.getBoundingClientRect();
     return {
       top: board.top - outer.top, right: outer.right - board.right,
-      bottom: outer.bottom - board.bottom, left: board.left - outer.left,
+      bottom: outer.bottom - footer.bottom, left: footer.left - outer.left,
+      footerGap: footer.top - board.bottom,
     };
   });
-  expect(margins).toEqual({ top: 8, right: 8, bottom: 8, left: 8 });
+  expect(margins).toEqual({ top: 8, right: 8, bottom: 8, left: 8, footerGap: 8 });
   const dimensions = await exported.evaluate((element) => ({ width: element.scrollWidth, height: element.scrollHeight }));
   expect(dimensions.height).toBeGreaterThan(900);
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: '↓ Export JPEG' }).click();
+  await page.getByRole('button', { name: 'Download', exact: true }).click();
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe('my-book-tier-list.jpg');
   const file = testInfo.outputPath('tier-list.jpg');
@@ -600,22 +604,25 @@ test('downloads a full tier-only JPEG with long labels and offscreen rows', asyn
     const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
     let darkTop = 0;
     let darkBottom = 0;
+    let footerPixels = 0;
     for (let y = 0; y < canvas.height; y += 3) {
       for (let x = 0; x < canvas.width; x += 3) {
         const offset = (y * canvas.width + x) * 4;
         if (data[offset] < 160 && data[offset + 1] < 160 && data[offset + 2] < 160) {
           if (y < canvas.height / 2) darkTop++;
           else darkBottom++;
+          if (y >= canvas.height - 52 && y < canvas.height - 16 && x >= 16 && x < 600) footerPixels++;
         }
       }
     }
-    return { width: image.naturalWidth, height: image.naturalHeight, darkTop, darkBottom };
+    return { width: image.naturalWidth, height: image.naturalHeight, darkTop, darkBottom, footerPixels };
   }, bytes.toString('base64'));
   expect(decoded.width).toBe(dimensions.width * 2);
   expect(decoded.height).toBe(dimensions.height * 2);
   expect(decoded.darkTop).toBeGreaterThan(1000);
   expect(decoded.darkBottom).toBeGreaterThan(1000);
-  await expect(page.getByRole('button', { name: '↓ Export JPEG' })).toBeEnabled();
+  expect(decoded.footerPixels).toBeGreaterThan(30);
+  await expect(page.getByRole('button', { name: 'Download', exact: true })).toBeEnabled();
   await page.screenshot({ path: testInfo.outputPath('app.png'), fullPage: true });
   await testInfo.attach('Exported full board', { path: file, contentType: 'image/jpeg' });
 });

@@ -92,7 +92,7 @@ Malformed saved data is not overwritten automatically. A warning offers an expli
 
 ## JPEG export
 
-**Export JPEG** downloads the entire tier board, including empty tiers and offscreen books, with narrow 8px outer padding. The image has no title, app branding, or footer. The reading pile and controls are excluded. A separate rendering wraps long labels and snapshots current metadata/selections without waiting for lookup.
+**Export JPEG** downloads the entire tier board, including empty tiers and offscreen books, with narrow 8px outer padding. The current URL, with its query string removed, appears at the bottom left. The image has no title or app branding. The reading pile and controls are excluded. A separate rendering wraps long labels and snapshots current metadata/selections without waiting for lookup.
 
 Selected covers are preflighted at larger size with timeouts and reused as verified embedded bytes. Missing, invalid, blocked, or stalled artwork names the affected books and offers **Retry export** or **Export with placeholders for failed covers**. Display image errors independently show the bundled placeholder and an explicit retry.
 

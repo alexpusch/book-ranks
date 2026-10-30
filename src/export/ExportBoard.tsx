@@ -3,6 +3,8 @@ import { BookContent } from '../books/BookContent';
 
 export function ExportBoard({ board }: { board: Board }) {
   const books = new Map<string, Book>(board.books.map((book) => [book.id, book]));
+  const url = new URL(window.location.href);
+  url.search = '';
   return (
     <div className="export-board">
       <div className="tier-board">
@@ -17,6 +19,7 @@ export function ExportBoard({ board }: { board: Board }) {
           </section>
         ))}
       </div>
+      <footer className="export-url">{url.href}</footer>
     </div>
   );
 }

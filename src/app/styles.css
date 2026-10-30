@@ -1123,6 +1123,14 @@ main {
   color: var(--text);
 }
 
+.export-url {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
