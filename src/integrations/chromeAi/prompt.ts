@@ -21,6 +21,23 @@ declare global {
 }
 
 let promptTail = Promise.resolve();
+let modelDownloadProgress: number | null = null;
+const downloadListeners = new Set<() => void>();
+
+export function getModelDownloadProgress(): number | null {
+  return modelDownloadProgress;
+}
+
+export function subscribeModelDownload(listener: () => void): () => void {
+  downloadListeners.add(listener);
+  return () => { downloadListeners.delete(listener); };
+}
+
+function setModelDownloadProgress(progress: number | null) {
+  if (modelDownloadProgress === progress) return;
+  modelDownloadProgress = progress;
+  for (const listener of downloadListeners) listener();
+}
 
 export async function requestBookPrompt(
   input: string, instructions: string, schema: object,
@@ -53,22 +70,39 @@ async function runPrompt(
     throw new Error('Chrome AI is unavailable on this device. Check Chrome model support, free disk space, and built-in AI settings.');
   }
   onStatus(availability === 'available' ? 'Preparing Chrome AI...' : 'Downloading Chrome AI model. The first use may take a while...');
-  const session = await model.create({
-    signal,
-    initialPrompts: [{ role: 'system', content: instructions }],
-    monitor(monitor) {
-      monitor.addEventListener('downloadprogress', ({ loaded }) => {
-        if (!signal.aborted) onStatus(`Downloading Chrome AI model: ${Math.round(loaded * 100)}%`);
-      });
-    },
-  });
+  const downloading = availability === 'downloadable' || availability === 'downloading';
+  let downloadActive = downloading;
+  const clearDownload = () => {
+    downloadActive = false;
+    setModelDownloadProgress(null);
+  };
+  let session: ModelSession | undefined;
   try {
+    if (downloading) setModelDownloadProgress(0);
+    signal.addEventListener('abort', clearDownload, { once: true });
+    session = await model.create({
+      signal,
+      initialPrompts: [{ role: 'system', content: instructions }],
+      monitor(monitor) {
+        monitor.addEventListener('downloadprogress', ({ loaded }) => {
+          // Cached models can also emit progress events during session creation.
+          if (downloadActive && !signal.aborted && Number.isFinite(loaded)) {
+            const progress = Math.max(0, Math.min(1, loaded));
+            setModelDownloadProgress(progress);
+            onStatus(`Downloading Chrome AI model: ${Math.round(progress * 100)}%`);
+          }
+        });
+      },
+    });
+    clearDownload();
     signal.throwIfAborted();
     onStatus(status);
     const response = await session.prompt(input, { responseConstraint: schema, signal });
     signal.throwIfAborted();
     return response;
   } finally {
-    session.destroy();
+    signal.removeEventListener('abort', clearDownload);
+    clearDownload();
+    session?.destroy();
   }
 }

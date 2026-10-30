@@ -343,6 +343,77 @@ describe('book list UI', () => {
     render(<App />);
     expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
     expect(window.LanguageModel!.create).not.toHaveBeenCalled();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it.each(['downloadable', 'downloading', 'available'] as const)('shows download progress only for an actual download, not a cached %s session', async (availability) => {
+    const model = window.LanguageModel!;
+    vi.mocked(model.availability).mockResolvedValue(availability);
+    let reportProgress!: (event: { loaded: number }) => void;
+    let finishCreation!: () => void;
+    let finishPrompt!: () => void;
+    const prompt = vi.fn(() => new Promise<string>((resolve) => {
+      finishPrompt = () => resolve(JSON.stringify({ books: [{ title: 'Dune', author: '' }] }));
+    }));
+    vi.mocked(model.create).mockImplementationOnce((options) => {
+      options.monitor({ addEventListener: (_type, listener) => { reportProgress = listener; } });
+      return new Promise((resolve) => { finishCreation = () => resolve({ prompt, destroy: vi.fn() }); });
+    });
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await waitFor(() => expect(model.create).toHaveBeenCalledOnce());
+    if (availability !== 'available') {
+      const progress = screen.getByRole('progressbar', { name: /Downloading Chrome AI model/ });
+      expect(progress).toHaveAttribute('value', '0');
+      expect(progress.parentElement?.previousElementSibling).toHaveClass('ai-entry-row');
+    }
+    act(() => reportProgress({ loaded: 0.42 }));
+    if (availability === 'available') expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    else {
+      expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0.42');
+      expect(screen.getByText('42%')).toBeVisible();
+    }
+    expect(screen.getByLabelText('Book title and author in natural language')).toBeEnabled();
+    expect(screen.getByRole('button', { name: '+ Add book' })).toBeEnabled();
+    vi.mocked(model.availability).mockResolvedValue('available');
+    await act(async () => finishCreation());
+    expect(prompt).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    act(() => reportProgress({ loaded: 1 }));
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    await act(async () => finishPrompt());
+    expect(await screen.findByRole('article', { name: 'Dune by Unknown author' })).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Book title and author in natural language'), 'Piranesi');
+    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    expect(await screen.findByRole('article', { name: 'Piranesi by Unknown author' })).toBeInTheDocument();
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it.each(['failure', 'cancellation'] as const)('clears download progress on %s and keeps errors on the card', async (outcome) => {
+    const model = window.LanguageModel!;
+    vi.mocked(model.availability).mockResolvedValue('downloadable');
+    let failDownload!: () => void;
+    vi.mocked(model.create).mockImplementationOnce(({ signal }) => new Promise((_resolve, reject) => {
+      failDownload = () => reject(new Error('Model download failed'));
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
+    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    expect(await screen.findByRole('progressbar')).toBeVisible();
+    if (outcome === 'failure') {
+      await act(async () => failDownload());
+      expect(await screen.findByRole('alert')).toHaveTextContent('Model download failed');
+    } else {
+      await user.click(screen.getByRole('button', { name: 'Remove Dune' }));
+      expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    }
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
   it.each(['missing', 'unavailable', 'rejected'] as const)('shows only the form without mode tabs when the Prompt API is %s', async (state) => {

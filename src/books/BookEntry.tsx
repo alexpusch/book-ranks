@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { importBooks, queueBook, type Board, type BoardChange } from '../board/board';
+import { getModelDownloadProgress, subscribeModelDownload } from '../integrations/chromeAi/prompt';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
@@ -16,6 +17,7 @@ export function BookEntry({ board, onChange, onNotice }: {
   const [author, setAuthor] = useState('');
   const [entryOpen, setEntryOpen] = useState(true);
   const [inputError, setInputError] = useState('');
+  const downloadProgress = useSyncExternalStore(subscribeModelDownload, getModelDownloadProgress);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +92,10 @@ export function BookEntry({ board, onChange, onNotice }: {
               placeholder="J. R. R. Tolkien" aria-describedby="input-help" />
           </label>
           <button className="primary-button" type="submit">+ Add book</button>
+        </div>}
+        {downloadProgress !== null && <div className="model-download">
+          <label htmlFor="model-download-progress">Downloading Chrome AI model <span>{Math.round(downloadProgress * 100)}%</span></label>
+          <progress id="model-download-progress" max={1} value={downloadProgress} />
         </div>}
         {inputError && <p className="field-error" id="input-error" role="alert">{inputError}</p>}
       </form>

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { extractBooks } from './extraction';
-import { type BookLanguageModel } from '../integrations/chromeAi/prompt';
+import { getModelDownloadProgress, subscribeModelDownload, type BookLanguageModel } from '../integrations/chromeAi/prompt';
 
 const prompt = vi.fn();
 const destroy = vi.fn();
@@ -69,15 +69,56 @@ describe('Chrome book extraction', () => {
 
   it.each(['downloadable', 'downloading'] as const)('reports model download progress for %s', async (state) => {
     availability.mockResolvedValueOnce(state);
+    const progress: (number | null)[] = [];
+    const unsubscribe = subscribeModelDownload(() => progress.push(getModelDownloadProgress()));
     create.mockImplementationOnce(async (options) => {
       options.monitor({ addEventListener: (_type, listener) => listener({ loaded: 0.42 }) });
       return { prompt, destroy };
     });
     const onStatus = vi.fn();
-    await extractBooks('Dune', onStatus, new AbortController().signal);
+    try {
+      await extractBooks('Dune', onStatus, new AbortController().signal);
+    } finally {
+      unsubscribe();
+    }
+    expect(progress).toEqual([0, 0.42, null]);
+    expect(getModelDownloadProgress()).toBeNull();
     expect(onStatus).toHaveBeenCalledWith(expect.stringContaining('first use'));
     expect(onStatus).toHaveBeenCalledWith('Downloading Chrome AI model: 42%');
     expect(onStatus).toHaveBeenLastCalledWith('Extracting and normalizing books with Chrome AI...');
+  });
+
+  it('ignores cached-model progress events', async () => {
+    create.mockImplementationOnce(async (options) => {
+      options.monitor({ addEventListener: (_type, listener) => {
+        listener({ loaded: 0 });
+        expect(getModelDownloadProgress()).toBeNull();
+        listener({ loaded: 1 });
+        expect(getModelDownloadProgress()).toBeNull();
+      } });
+      return { prompt, destroy };
+    });
+    const onStatus = vi.fn();
+    await extractBooks('Dune', onStatus, new AbortController().signal);
+    expect(onStatus).not.toHaveBeenCalledWith(expect.stringContaining('Downloading'));
+  });
+
+  it('clears progress immediately on cancellation and ignores late download events', async () => {
+    availability.mockResolvedValueOnce('downloadable');
+    const controller = new AbortController();
+    create.mockImplementationOnce(async (options) => {
+      options.monitor({ addEventListener: (_type, listener) => {
+        listener({ loaded: 0.42 });
+        expect(getModelDownloadProgress()).toBe(0.42);
+        controller.abort();
+        expect(getModelDownloadProgress()).toBeNull();
+        listener({ loaded: 0.6 });
+        expect(getModelDownloadProgress()).toBeNull();
+      } });
+      return { prompt, destroy };
+    });
+    await expect(extractBooks('Dune', vi.fn(), controller.signal)).rejects.toThrow();
+    expect(destroy).toHaveBeenCalledOnce();
   });
 
   it.each([
