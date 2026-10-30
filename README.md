@@ -20,6 +20,17 @@ npm start
 
 `npm start` previews the static production build locally. Deploy the contents of `dist/` to any HTTPS static host; Node.js is not needed in production. Configure the host to serve `index.html` for SPA navigation. No `.env` file or Open Library contact configuration is required. Old backend `.env` settings and SQLite cache files are unused; browser boards are unaffected.
 
+## Deploy to GitHub Pages
+
+In the repository's **Settings → Pages**, set **Source** to **GitHub Actions**.
+Push to `main`, or manually run **Deploy to GitHub Pages** from the **Actions** tab.
+The [deployment workflow](./.github/workflows/deploy-pages.yml) installs dependencies,
+type-checks and builds the app with Node.js 22, then deploys `dist/`.
+It uses the base path reported by GitHub Pages, supporting repository subpaths and custom domains.
+
+The default site URL for this repository is <https://alexpusch.github.io/book-ranks/>.
+No deployment secrets or backend are required.
+
 ## Build your list
 
 Add **one book at a time**, then click **+ Add book**. When the Prompt API is supported, the toggle at the top of the form offers two modes:

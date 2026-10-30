@@ -22,6 +22,7 @@ Book ranks is a local book tier list generator. Users enter books, choose Open L
 ## Implementation
 
 - **Frontend:** Client-only React SPA with Vite and TypeScript, deployable to HTTPS static hosting. No application backend, database, server configuration, or private credentials. `@dnd-kit` handles dragging; `html-to-image` generates JPEGs in the browser.
+- **Deployment:** [GitHub Actions](./.github/workflows/deploy-pages.yml) builds and deploys to GitHub Pages on pushes to `main` or manual runs, using the configured Pages base path.
 - **State:** [src/board/](./src/board/) defines books, tiers, ordered placements, persisted cover selections, immutable board operations, and snapshot validation/persistence. [src/app/useBoard.ts](./src/app/useBoard.ts) owns React board state, autosave, and storage recovery.
 - **UI:** [src/app/App.tsx](./src/app/App.tsx) composes the app. [src/books/](./src/books/) owns entry forms, editing, book/artwork rendering, and local image preparation. [src/ranking/](./src/ranking/) owns drag interactions, gallery/tier layout, and tier settings. [src/export/](./src/export/) owns separate export rendering and JPEG generation.
 - **Book resolution:** [src/bookResolution/](./src/bookResolution/) owns extraction, matching, per-book lookup status, FIFO processing, cancellation, stale-result protection, metadata updates, and explicit edition discovery, independently of UI rendering. [src/integrations/chromeAi/prompt.ts](./src/integrations/chromeAi/prompt.ts) owns shared prompt serialization, model progress, and session cleanup.
