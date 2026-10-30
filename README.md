@@ -35,8 +35,8 @@ No deployment secrets or backend are required.
 
 Add **one book at a time**, then click **+ Add book**. When the Prompt API is supported, the toggle at the top of the form offers two modes:
 
-- **AI assisted** (shown and selected by default only when the Prompt API reports an available, downloadable, or downloading model): paste a book's title, optionally including its author, into the compact input, for example `Children of Ruin` or `The Lord of the Rings by J. R. R. Tolkien`. The explanation below the toggle links to the Prompt API documentation.
-- **Manual entry** (the only mode when the Prompt API is missing or unavailable): enter the **Book name** and optional **Author** in separate fields. Adding a book this way does not require AI.
+- **Manual entry** (first tab, selected by default unless the model is already downloaded; the only mode when the Prompt API is missing or unavailable): enter the **Book name** and optional **Author** in separate fields. Adding a book this way does not require AI.
+- **AI assisted** (second tab, selected by default only when the Prompt API reports `available`; also offered for downloadable or downloading models): paste a book's title, optionally including its author, into the compact input, for example `Children of Ruin` or `The Lord of the Rings by J. R. R. Tolkien`. The explanation below the toggle links to the Prompt API documentation and, only while the model is not yet downloaded, highlights "This will require initial Gemini Nano download" in yellow with a warning icon. The warning disappears once the download completes.
 
 Manual entry is available while the app checks Prompt API support, without downloading or creating a model session. While checking, or when the API is missing or unavailable, only the form is shown, without mode tabs. Starting a manual draft or selecting manual entry keeps that mode active when the check completes. If the check fails, the app shows an error and keeps the mode tabs hidden.
 

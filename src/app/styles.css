@@ -36,6 +36,7 @@
   --row-line: #e0e2d6;
   --warning: #fff4d7;
   --warning-line: #cfb477;
+  --warning-text: #876300;
   --error: #8e3329;
   --danger: #a63e37;
   --danger-text: #974437;
@@ -80,6 +81,7 @@
   --row-line: #444444;
   --warning: #3c3320;
   --warning-line: #9c8248;
+  --warning-text: #f4cf67;
   --error: #ffb4a5;
   --danger: #ffb4a5;
   --danger-text: #ffb4a5;
@@ -232,6 +234,15 @@ main {
 .entry-mode-help a {
   color: var(--green);
   text-underline-offset: 3px;
+}
+
+.model-download-warning {
+  color: var(--warning-text);
+}
+
+.model-download-warning svg {
+  vertical-align: text-bottom;
+  margin-right: 4px;
 }
 
 .model-download {

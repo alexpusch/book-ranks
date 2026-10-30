@@ -10,22 +10,27 @@ export function BookEntry({ board, onChange, onNotice }: {
   board: Board; onChange: BoardChange; onNotice: (notice: string) => void;
 }) {
   const [input, setInput] = useState('');
-  const [selectedEntryMode, setEntryMode] = useState<'ai' | 'structured'>('ai');
+  const [selectedEntryMode, setEntryMode] = useState<'ai' | 'structured' | null>(null);
   const [aiAvailable, setAiAvailable] = useState(false);
-  const entryMode = aiAvailable ? selectedEntryMode : 'structured';
+  const [aiReady, setAiReady] = useState(false);
+  const entryMode = aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [entryOpen, setEntryOpen] = useState(true);
   const [inputError, setInputError] = useState('');
   const downloadProgress = useSyncExternalStore(subscribeModelDownload, getModelDownloadProgress);
+  const downloading = downloadProgress !== null;
 
   useEffect(() => {
+    if (downloading) return;
     let cancelled = false;
     async function checkAvailability() {
       try {
         const availability = await window.LanguageModel?.availability();
         if (!cancelled) {
           setAiAvailable(availability === 'available' || availability === 'downloadable' || availability === 'downloading');
+          setAiReady(availability === 'available');
+          setEntryMode((mode) => mode ?? (availability === 'available' ? 'ai' : 'structured'));
         }
       } catch (error) {
         if (!cancelled) setInputError(`Could not check Chrome AI availability. ${errorMessage(error)}`);
@@ -33,7 +38,7 @@ export function BookEntry({ board, onChange, onNotice }: {
     }
     void checkAvailability();
     return () => { cancelled = true; };
-  }, []);
+  }, [downloading]);
 
   function addBook() {
     setInputError('');
@@ -67,13 +72,19 @@ export function BookEntry({ board, onChange, onNotice }: {
         addBook();
       }}>
         {aiAvailable && <div className="entry-modes" role="group" aria-label="Book addition mode">
-          <button type="button" aria-pressed={entryMode === 'ai'}
-            onClick={() => { setEntryMode('ai'); setInputError(''); }}>AI assisted</button>
           <button type="button" aria-pressed={entryMode === 'structured'}
             onClick={() => { setEntryMode('structured'); setInputError(''); }}>Manual entry</button>
+          <button type="button" aria-pressed={entryMode === 'ai'}
+            onClick={() => { setEntryMode('ai'); setInputError(''); }}>AI assisted</button>
         </div>}
         <p className="entry-mode-help" id="entry-mode-help">{entryMode === 'ai'
-          ? <>Uses Chrome's built-in, on-device LLM to clean up your book details. This will require initial Gemini Nano download. <a href="https://developer.chrome.com/docs/ai/prompt-api" target="_blank" rel="noreferrer">About the Prompt API</a></>
+          ? <>Uses Chrome's built-in, on-device LLM to clean up your book details. {!aiReady && <span className="model-download-warning">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M12 3 2 21h20L12 3Z" strokeLinejoin="round" />
+              <path d="M12 9v5m0 3v1" />
+            </svg>
+            This will require initial Gemini Nano download
+          </span>}{!aiReady && '. '}<a href="https://developer.chrome.com/docs/ai/prompt-api" target="_blank" rel="noreferrer">About the Prompt API</a></>
           : ''}</p>
         {entryMode === 'ai' ? <div className="ai-entry-row"><label className="entry-field" htmlFor="book-input">
           <span>Book title and author in natural language</span>

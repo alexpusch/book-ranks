@@ -338,12 +338,32 @@ describe('book list UI', () => {
     expect(screen.getByRole('link', { name: 'About the Prompt API' })).toHaveAttribute('href', 'https://developer.chrome.com/docs/ai/prompt-api');
   });
 
-  it.each(['available', 'downloadable', 'downloading'] as const)('shows assisted entry when the model is %s without creating a session', async (availability) => {
+  it.each(['available', 'downloadable', 'downloading'] as const)('defaults to AI only for a downloaded model (%s) without creating a session', async (availability) => {
     vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
     render(<App />);
-    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', String(availability === 'available'));
+    const modes = screen.getByRole('group', { name: 'Book addition mode' });
+    expect(within(modes).getAllByRole('button').map((button) => button.textContent)).toEqual(['Manual entry', 'AI assisted']);
+    expect(screen.getByRole('button', { name: 'Manual entry' })).toHaveAttribute('aria-pressed', String(availability !== 'available'));
     expect(window.LanguageModel!.create).not.toHaveBeenCalled();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    if (availability === 'available') {
+      expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
+    }
+  });
+
+  it.each(['downloadable', 'downloading'] as const)('shows a yellow download warning with an icon when the model is %s', async (availability) => {
+    vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'Manual entry' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'AI assisted' }));
+    const warning = screen.getByText('This will require initial Gemini Nano download');
+    expect(warning).toHaveClass('model-download-warning');
+    expect(warning.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByLabelText('Book title and author in natural language')).toBeVisible();
+    expect(window.LanguageModel!.create).not.toHaveBeenCalled();
   });
 
   it.each(['downloadable', 'downloading', 'available'] as const)('shows download progress only for an actual download, not a cached %s session', async (availability) => {
@@ -361,6 +381,7 @@ describe('book list UI', () => {
     });
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
     await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '+ Add book' }));
@@ -382,6 +403,7 @@ describe('book list UI', () => {
     await act(async () => finishCreation());
     expect(prompt).toHaveBeenCalledOnce();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
     act(() => reportProgress({ loaded: 1 }));
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     await act(async () => finishPrompt());
@@ -403,6 +425,7 @@ describe('book list UI', () => {
     }));
     const user = userEvent.setup();
     render(<App />);
+    await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
     await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
     await user.click(screen.getByRole('button', { name: '+ Add book' }));
     expect(await screen.findByRole('progressbar')).toBeVisible();
