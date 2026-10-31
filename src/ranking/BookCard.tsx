@@ -57,7 +57,6 @@ export function BookCard({ book, location, onRemove }: BookCardProps) {
           </svg> : <span className="cover-spinner" aria-hidden="true" />}
         </span>}
       <div className="cover-action">
-        {!multipleMatches && !book.coverSelection && state?.outcome === 'needs-review' && <span>Review required</span>}
         {!book.coverSelection && state?.outcome === 'not-found' && <span>No match</span>}
         {book.coverSelection?.kind === 'open-library'}
         {state && 'warning' in state && state.warning && <span>{state.warning}</span>}

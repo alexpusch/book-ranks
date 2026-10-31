@@ -7,6 +7,7 @@ import { createBoard, importBooks, moveBook, type Board } from '../board/board';
 import { coverUrl, type WorkCandidate } from '../integrations/openLibrary/types';
 import { openLibraryClient } from '../integrations/openLibrary/client';
 import * as localCover from '../books/localCover';
+import placeholder from '../books/assets/cover.svg';
 
 vi.mock('../integrations/openLibrary/client', () => ({
   openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
@@ -387,15 +388,32 @@ it('persists a matched identity without a cover and does not repeat lookup on re
   expect(screen.getByRole('button', { name: 'Find additional editions and covers' })).toBeEnabled();
 });
 
-it('does not force a candidate when Chrome AI returns no suitable match', async () => {
+it('shows a placeholder without a review label when Chrome AI returns no suitable match', async () => {
   seed();
   search.mockResolvedValueOnce([ambiguousWork]);
   vi.mocked(window.LanguageModel!.create).mockResolvedValueOnce({
     prompt: vi.fn().mockResolvedValue('{"workId":null}'), destroy: vi.fn(),
   });
   render(<App />);
-  expect(await screen.findByText('Review required')).toBeInTheDocument();
+  await edit();
+  expect(await screen.findByText('Review the works and editions before choosing artwork.')).toBeInTheDocument();
+  await userEvent.click(screen.getByRole('button', { name: 'Close book editor' }));
+  const card = screen.getByRole('article', { name: 'Dune by Frank Herbert' });
+  expect(card.querySelector('img.book-cover')).toHaveAttribute('src', placeholder);
+  expect(within(card).queryByText('Review required')).not.toBeInTheDocument();
   expect(saved().books[0].matchedWorkId).toBeUndefined();
+});
+
+it('shows a placeholder without a review label when a matched work has no artwork', async () => {
+  seed();
+  search.mockResolvedValueOnce([{ ...work, covers: [] }]);
+  render(<App />);
+  await waitFor(() => expect(saved().books[0].matchedWorkId).toBe('OL1W'));
+  const card = screen.getByRole('article', { name: 'Dune by Frank Herbert' });
+  expect(card.querySelector('img.book-cover')).toHaveAttribute('src', placeholder);
+  expect(within(card).queryByText('Review required')).not.toBeInTheDocument();
+  expect(saved().books[0].coverSelection).toBeUndefined();
+  expect(screen.getByRole('button', { name: 'Drag Dune' })).toBeInTheDocument();
 });
 
 it('applies duplicate canonical metadata without merging placements or corrupting saved data', async () => {
