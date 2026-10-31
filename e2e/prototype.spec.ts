@@ -7,7 +7,7 @@ async function openBoard(page: Page, board: Board) {
   await page.addInitScript((snapshot) => {
     localStorage.setItem('shelf-life.board.v1', JSON.stringify(snapshot));
   }, board);
-  await page.goto('/');
+  await page.goto('/?ai=true');
 }
 
 async function keyboardDrag(page: Page, card: Locator, key: string, targetId: string) {
@@ -57,8 +57,22 @@ test('static production build serves the SPA and has no backend routes', async (
   expect(asset.headers()['content-type']).toContain('javascript');
 });
 
+test('AI entry stays hidden unless the URL opts in, regardless of saved preference', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('shelf-life.entry-mode', 'ai'));
+  for (const url of ['/', '/?ai=false', '/?ai=True']) {
+    await page.goto(url);
+    await expect(page.getByLabel('Book name', { exact: true })).toBeVisible();
+    await expect(page.getByRole('group', { name: 'Book addition mode' })).toHaveCount(0);
+    await expect(page.getByLabel('Book title and author in natural language')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.getItem('shelf-life.entry-mode'))).toBe('ai');
+  }
+  await page.goto('/?source=share&ai=true');
+  await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByLabel('Book title and author in natural language')).toBeVisible();
+});
+
 test('compact entry modes support keyboard submission and responsive structured fields', async ({ page }, testInfo) => {
-  await page.goto('/');
+  await page.goto('/?ai=true');
   async function expectFullWidthEntry() {
     const panel = page.getByRole('region', { name: 'Add books', exact: true });
     const heading = await panel.getByRole('heading', { name: 'Add books', exact: true }).boundingBox();
@@ -137,7 +151,7 @@ test('compact entry modes support keyboard submission and responsive structured 
 });
 
 test('drag-to-rank hint floats outside the gallery only when there is room', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?ai=true');
   const gallery = page.getByRole('region', { name: 'Your books', exact: true });
   const hint = gallery.getByText('drag to rank', { exact: true });
   const zone = gallery.locator('.gallery-zone');
@@ -175,7 +189,7 @@ test('non-Chrome browsers default to structured entry and can add without a lang
     Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 Firefox/140.0' });
     Object.defineProperty(window, 'LanguageModel', { configurable: true, value: undefined });
   });
-  await page.goto('/');
+  await page.goto('/?ai=true');
   await expect(page.getByRole('button', { name: 'Manual entry', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveCount(0);
   await page.getByLabel('Book name', { exact: true }).fill('A book without AI');
@@ -218,7 +232,7 @@ test('Safari manual entry automatically matches covers without Chrome AI', async
 test('Chrome AI submissions appear immediately, stay rankable, and process independently of further input', async ({ page }, testInfo) => {
   const prompts: Route[] = [];
   await page.route('**/test-ai-extraction?**', (route) => { prompts.push(route); });
-  await page.goto('/');
+  await page.goto('/?ai=true');
   await page.evaluate(() => {
     window.LanguageModel = {
       availability: async () => 'available',
@@ -269,7 +283,7 @@ test('Chrome AI submissions appear immediately, stay rankable, and process indep
 
 test('pointer dragging, within-tier ordering, cross-tier moves, gallery return, and refresh', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1360, height: 1800 });
-  await page.goto('/');
+  await page.goto('/?ai=true');
   await expect(page.locator('main > :first-child')).toHaveClass('entry-panel');
   await expect(page.getByRole('banner')).toHaveCount(0);
   await addBooks(page, 'Dune | Frank Herbert\nPiranesi | Susanna Clarke\nThe Hobbit | J. R. R. Tolkien');
@@ -401,7 +415,7 @@ test('hover and keyboard focus reveal a drag zone above edit and delete buttons'
 });
 
 test('keyboard dragging and tier settings preserve book placement', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?ai=true');
   await addBooks(page, 'One\nTwo');
   const s = page.getByRole('region', { name: 'Tier S', exact: true });
   const gallery = page.getByRole('region', { name: 'Your books', exact: true });

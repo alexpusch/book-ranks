@@ -15,7 +15,6 @@ test('review Show more fetches the next ten results only on click and appends th
     await route.fulfill({ json: { docs: docs.slice(Number(offset), Number(offset) + 10), numFound: 12 } });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Manual entry', exact: true }).click();
   await page.getByLabel('Book name', { exact: true }).fill('Dune');
   await page.getByRole('button', { name: '+ Add book' }).click();
   const card = page.getByRole('article', { name: 'Dune by Unknown author', exact: true });
@@ -57,7 +56,6 @@ for (const width of [1360, 390]) {
       await route.fulfill({ json: { docs: params.get('title') === 'Dune Messiah' ? [docs[1]] : docs } });
     });
     await page.goto('/');
-    await page.getByRole('button', { name: 'Manual entry', exact: true }).click();
     await page.getByLabel('Book name', { exact: true }).fill('Dune');
     await page.getByLabel('Author', { exact: false }).fill('Frank Herbert');
     await page.getByRole('button', { name: '+ Add book' }).click();
@@ -115,7 +113,7 @@ for (const width of [1360, 390]) {
 }
 
 test('title-only Chrome AI entry matches Children of Ruin despite a legacy edition search result', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?ai=true');
   await page.evaluate(() => {
     Object.defineProperty(window, 'LanguageModel', {
       configurable: true,
@@ -156,7 +154,7 @@ test('title-only Chrome AI entry matches Children of Ruin despite a legacy editi
 });
 
 test('AI-normalized titles and authors are saved and sent to Open Library lookup', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/?ai=true');
   await page.evaluate(() => {
     Object.defineProperty(window, 'LanguageModel', {
       configurable: true,
@@ -195,7 +193,7 @@ test('serial cover searches show waiting and spinning states and saving changed 
     await new Promise<void>((resolve) => release.set(input.title, resolve));
     await route.fulfill({ json: { docs: [] } });
   });
-  await page.goto('/');
+  await page.goto('/?ai=true');
   for (const title of ['First', 'Second', 'Removed']) {
     await page.getByLabel('Book title and author in natural language').fill(title);
     await page.getByRole('button', { name: '+ Add book' }).click();

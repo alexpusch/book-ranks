@@ -14,6 +14,7 @@ vi.mock('../integrations/openLibrary/client', () => ({
 }));
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/?ai=true');
   localStorage.clear();
   vi.mocked(openLibraryClient.search).mockReset().mockResolvedValue([]);
   vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
@@ -23,6 +24,29 @@ beforeEach(() => {
 });
 
 describe('book list UI', () => {
+  it.each(['/', '/?ai=false', '/?ai=', '/?ai=True', '/?other=true', '/?other=ai%3Dtrue'])(
+    'hides AI entry at %s even with a saved AI preference and an available model',
+    async (url) => {
+      window.history.replaceState(null, '', url);
+      localStorage.setItem('shelf-life.entry-mode', 'ai');
+      render(<App />);
+      expect(screen.queryByRole('group', { name: 'Book addition mode' })).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Book title and author in natural language')).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'About the Prompt API' })).not.toBeInTheDocument();
+      expect(window.LanguageModel?.availability).not.toHaveBeenCalled();
+      await userEvent.setup().type(screen.getByLabelText('Book name'), 'Manual book');
+      await userEvent.setup().click(screen.getByRole('button', { name: '+ Add book' }));
+      expect(await screen.findByRole('article', { name: 'Manual book by Unknown author' })).toBeInTheDocument();
+      expect(localStorage.getItem('shelf-life.entry-mode')).toBe('ai');
+    },
+  );
+
+  it('enables AI entry when ai=true appears alongside other URL parameters', async () => {
+    window.history.replaceState(null, '', '/?source=share&ai=true');
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('restores both dark and light theme choices after remounting', async () => {
     const user = userEvent.setup();
     let app = render(<App />);

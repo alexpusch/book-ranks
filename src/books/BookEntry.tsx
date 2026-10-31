@@ -13,9 +13,10 @@ export function BookEntry({ board, onChange, onNotice }: {
   const [input, setInput] = useState('');
   const preference = useStoredPreference('shelf-life.entry-mode', ['ai', 'structured'], null);
   const [selectedEntryMode, setEntryMode] = useState(preference.value);
+  const aiEnabled = new URLSearchParams(window.location.search).get('ai') === 'true';
   const [aiAvailable, setAiAvailable] = useState(false);
   const [aiReady, setAiReady] = useState(false);
-  const entryMode = aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
+  const entryMode = aiEnabled && aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [entryOpen, setEntryOpen] = useState(true);
@@ -24,7 +25,7 @@ export function BookEntry({ board, onChange, onNotice }: {
   const downloading = downloadProgress !== null;
 
   useEffect(() => {
-    if (downloading) return;
+    if (!aiEnabled || downloading) return;
     let cancelled = false;
     async function checkAvailability() {
       try {
@@ -40,7 +41,7 @@ export function BookEntry({ board, onChange, onNotice }: {
     }
     void checkAvailability();
     return () => { cancelled = true; };
-  }, [downloading]);
+  }, [aiEnabled, downloading]);
 
   function addBook() {
     setInputError('');
@@ -81,7 +82,7 @@ export function BookEntry({ board, onChange, onNotice }: {
         event.preventDefault();
         addBook();
       }}>
-        {aiAvailable && <div className="entry-modes" role="group" aria-label="Book addition mode">
+        {aiEnabled && aiAvailable && <div className="entry-modes" role="group" aria-label="Book addition mode">
           <button type="button" aria-pressed={entryMode === 'structured'}
             onClick={() => selectEntryMode('structured')}>Manual entry</button>
           <button type="button" aria-pressed={entryMode === 'ai'}
@@ -114,7 +115,7 @@ export function BookEntry({ board, onChange, onNotice }: {
           </label>
           <button className="primary-button" type="submit">+ Add book</button>
         </div>}
-        {downloadProgress !== null && <div className="model-download">
+        {aiEnabled && downloadProgress !== null && <div className="model-download">
           <label htmlFor="model-download-progress">Downloading Chrome AI model <span>{Math.round(downloadProgress * 100)}%</span></label>
           <progress id="model-download-progress" max={1} value={downloadProgress} />
         </div>}

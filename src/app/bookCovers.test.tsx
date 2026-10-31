@@ -22,6 +22,7 @@ const edition = {
   languages: ['eng'], publishers: ['Publisher'], isbns: [], publicationDate: '2025',
 };
 beforeEach(() => {
+  window.history.replaceState(null, '', '/?ai=true');
   localStorage.clear();
   search.mockReset().mockResolvedValue([]);
   vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({

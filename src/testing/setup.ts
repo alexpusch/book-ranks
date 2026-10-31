@@ -5,6 +5,7 @@ import { afterEach, beforeEach, vi } from 'vitest';
 afterEach(cleanup);
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/');
   vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36');
   vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify({ docs: [] }))));
   vi.stubGlobal('LanguageModel', {
