@@ -47,12 +47,7 @@ export function tidy(value: string): string {
   return value.trim().replace(/\s+/gu, ' ');
 }
 
-export function bookIdentity(book: Pick<Book, 'title' | 'author'>): string {
-  return JSON.stringify([tidy(book.title).toLowerCase(), tidy(book.author || UNKNOWN_AUTHOR).toLowerCase()]);
-}
-
 export function importBooks(board: Board, input: string | BookInput[]): Board {
-  const identities = new Set(board.books.map(bookIdentity));
   const entries: Omit<Book, 'id'>[] = [];
   const errors: string[] = [];
   const lines = typeof input === 'string' ? input.split(/\r?\n/u) : input;
@@ -66,12 +61,6 @@ export function importBooks(board: Board, input: string | BookInput[]): Board {
       errors.push(`${label}: ${typeof input === 'string' ? 'use Title | Author with a nonempty title and at most one |.' : 'the title cannot be empty.'}`);
       return;
     }
-    const identity = bookIdentity({ title, author });
-    if (identities.has(identity)) {
-      errors.push(`${label}: "${title}" by ${author} is already in this list or batch.`);
-      return;
-    }
-    identities.add(identity);
     entries.push({ title, author });
   });
   if (errors.length) throw new Error(errors.join('\n'));
@@ -132,9 +121,6 @@ export function updateBook(board: Board, bookId: string, changes: Pick<Book, 'ti
   const title = tidy(changes.title);
   const author = tidy(changes.author) || UNKNOWN_AUTHOR;
   if (!title) throw new Error('Book titles cannot be empty.');
-  if (board.books.some((book) => book.id !== bookId && bookIdentity(book) === bookIdentity({ title, author }))) {
-    throw new Error(`"${title}" by ${author} is already in this list.`);
-  }
   return { ...board, books: board.books.map((book) => {
     if (book.id !== bookId) return book;
     const { pendingInput: _pendingInput, ...details } = book;

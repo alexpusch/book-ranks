@@ -83,14 +83,7 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
           }
           const selection: CoverSelection | undefined = match.covers.length
             ? { kind: 'open-library', workId: match.id, ...match.covers[0] } : undefined;
-          let next: Board;
-          try {
-            next = updateBook(boardRef.current, id, { title: match.title, author: match.authors.join(', ') });
-          } catch (error) {
-            publish(id, { outcome: 'needs-review', works: [match],
-              warning: error instanceof Error ? error.message : 'Matched metadata could not be applied.' });
-            continue;
-          }
+          let next = updateBook(boardRef.current, id, { title: match.title, author: match.authors.join(', ') });
           next = { ...next, books: next.books.map((book) => book.id === id
             ? { ...book, matchedWorkId: match.id, coverSelection: book.coverSelection ?? selection } : book) };
           if (!onChange(() => next)) throw new Error('Could not save the matched book.');

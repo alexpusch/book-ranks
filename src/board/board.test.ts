@@ -10,7 +10,10 @@ describe('book import', () => {
     let board = queueBook(createBoard(), input);
     const id = board.gallery[0];
     expect(board.books[0]).toMatchObject({ id, title: input, pendingInput: input });
-    expect(() => queueBook(board, input.toLowerCase())).toThrow('already');
+    const duplicate = queueBook(board, input.toLowerCase());
+    expect(duplicate.books).toHaveLength(2);
+    expect(duplicate.books[1].pendingInput).toBe(input.toLowerCase());
+    expect(duplicate.books[1].id).not.toBe(id);
     expect(() => queueBook(board, '   ')).toThrow('title cannot be empty');
     board = moveBook(board, id, 'tier-S');
     board.books[0].coverSelection = { kind: 'placeholder' };
@@ -23,9 +26,10 @@ describe('book import', () => {
   it('imports structured AI results without interpreting title punctuation as separators', () => {
     const board = importBooks(createBoard(), [{ title: ' Title | Subtitle ', author: '' }]);
     expect(board.books[0]).toMatchObject({ title: 'Title | Subtitle', author: 'Unknown author' });
-    expect(() => importBooks(board, [
+    const next = importBooks(board, [
       { title: 'New', author: '' }, { title: 'title | subtitle', author: 'Unknown author' },
-    ])).toThrow('Book 2');
+    ]);
+    expect(next.books).toHaveLength(3);
     expect(board.books).toHaveLength(1);
     expect(() => importBooks(board, [{ title: ' ', author: 'Author' }])).toThrow('title cannot be empty');
     expect(() => importBooks(board, [])).toThrow('Enter at least one');
@@ -43,18 +47,24 @@ describe('book import', () => {
     expect(() => importBooks(createBoard(), text)).toThrow();
   });
 
-  it('rejects normalized duplicates within a batch atomically', () => {
-    const board = createBoard();
-    expect(() => importBooks(board, 'Dune | Frank Herbert\n dune | FRANK   HERBERT')).toThrow('Line 2');
-    expect(board.books).toEqual([]);
+  it('preserves exact and normalized duplicates within a batch as separate books', () => {
+    const board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune | Frank Herbert\n dune | FRANK   HERBERT');
+    expect(board.books.map(({ title, author }) => ({ title, author }))).toEqual([
+      { title: 'Dune', author: 'Frank Herbert' },
+      { title: 'Dune', author: 'Frank Herbert' },
+      { title: 'dune', author: 'FRANK HERBERT' },
+    ]);
+    expect(new Set(board.gallery).size).toBe(3);
+    expect(board.gallery).toEqual(board.books.map((book) => book.id));
   });
 
-  it('checks ranked and unranked books while allowing different authors', () => {
+  it('allows duplicates of ranked and unranked books without changing existing placements', () => {
     let board = importBooks(createBoard(), 'Dune | Frank Herbert\nPiranesi');
     board = moveBook(board, board.gallery[0], board.tiers[0].id);
-    expect(() => importBooks(board, 'New book\nDUNE | frank herbert')).toThrow('already');
-    expect(() => importBooks(board, 'piranesi | Unknown author')).toThrow('already');
-    expect(importBooks(board, 'Dune | Different Author').books).toHaveLength(3);
+    const next = importBooks(board, 'New book\nDUNE | frank herbert\npiranesi | Unknown author\nDune | Different Author');
+    expect(next.books).toHaveLength(6);
+    expect(next.tiers).toEqual(board.tiers);
+    expect(next.gallery).toHaveLength(5);
     expect(board.books).toHaveLength(2);
   });
 });
@@ -129,7 +139,10 @@ describe('board operations', () => {
     expect(next.gallery).toEqual(board.gallery);
     expect(next.tiers).toEqual(board.tiers);
     expect(() => updateBook(board, one.id, { title: ' ', author: '' })).toThrow('empty');
-    expect(() => updateBook(board, one.id, { title: ' two ', author: 'unknown AUTHOR' })).toThrow('already');
+    const duplicate = updateBook(board, one.id, { title: two.title, author: two.author });
+    expect(duplicate.books[0]).toEqual({ ...one, title: two.title, author: two.author });
+    expect(duplicate.books[1]).toEqual(two);
+    expect(duplicate.gallery).toEqual(board.gallery);
     expect(() => updateBook(board, 'missing', two)).toThrow('not found');
   });
 });

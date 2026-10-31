@@ -170,15 +170,18 @@ it('does not force a candidate when Chrome AI returns no suitable match', async 
   expect(saved().books[0].matchedWorkId).toBeUndefined();
 });
 
-it('reports canonical metadata collisions without merging placements or corrupting saved data', async () => {
+it('applies duplicate canonical metadata without merging placements or corrupting saved data', async () => {
   const board = importBooks(seed(), 'Dune: Canonical | Frank Herbert');
   board.books[1].coverSelection = { kind: 'placeholder' };
   persist(board);
   search.mockResolvedValueOnce([{ ...work, title: 'Dune: Canonical' }]);
   render(<App />);
-  expect(await screen.findByText(/already in this list/)).toBeInTheDocument();
+  await waitFor(() => expect(saved().books[0].matchedWorkId).toBe('OL1W'));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   expect(saved().books).toHaveLength(2);
-  expect(saved().books[0].title).toBe('Dune');
+  expect(saved().books[0].title).toBe('Dune: Canonical');
+  expect(saved().books[1]).toEqual(board.books[1]);
+  expect(saved().gallery).toEqual(board.gallery);
   expect(saved().tiers).toEqual(board.tiers);
 });
 
@@ -325,7 +328,7 @@ it('ignores a pending old identity after editing and retries using the latest fi
   expect(saved().books[0].coverSelection).toBeUndefined();
 });
 
-it('preserves manually saved artwork, rejects duplicate edits, and retries with unsaved fields', async () => {
+it('preserves manually saved artwork, allows duplicate edits, and retries with unsaved fields', async () => {
   const board = seed(selection);
   const other = importBooks(board, 'Other | Author');
   other.books[1].coverSelection = { kind: 'placeholder' };
@@ -335,7 +338,9 @@ it('preserves manually saved artwork, rejects duplicate edits, and retries with 
   fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Other' } });
   fireEvent.change(within(dialog).getByLabelText('Author'), { target: { value: 'Author' } });
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
-  expect(within(dialog).getByRole('alert')).toHaveTextContent('already');
+  expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+  expect(saved().books[0]).toMatchObject({ title: 'Other', author: 'Author', coverSelection: selection });
+  expect(saved().books[1]).toEqual(other.books[1]);
   fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'New name' } });
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
   expect(saved().books[0]).toMatchObject({ title: 'New name', coverSelection: selection });

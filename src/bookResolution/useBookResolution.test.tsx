@@ -78,11 +78,27 @@ it('reports invalid edits without changing the board', () => {
   const { result } = renderHook(() => useBoardResolution(initial));
 
   act(() => {
-    expect(result.current.saveBook(initial.books[1].id, 'Dune', 'Frank Herbert', false)).toContain('already in this list');
+    expect(result.current.saveBook(initial.books[1].id, ' ', 'Frank Herbert', false)).toContain('empty');
     expect(result.current.saveBook('missing', 'Dune', 'Frank Herbert', false)).toBe('Book not found.');
   });
 
   expect(result.current.board).toEqual(initial);
+  expect(openLibraryClient.search).not.toHaveBeenCalled();
+});
+
+it('allows matching another book metadata without merging books or their artwork', () => {
+  const initial = savedBooks();
+  const { result } = renderHook(() => useBoardResolution(initial));
+  act(() => {
+    expect(result.current.saveBook(initial.books[1].id, 'Dune', 'Frank Herbert', false)).toBeNull();
+  });
+  expect(result.current.board.books).toHaveLength(2);
+  expect(result.current.board.books[0]).toEqual(initial.books[0]);
+  expect(result.current.board.books[1]).toMatchObject({
+    id: initial.books[1].id, title: 'Dune', author: 'Frank Herbert', coverSelection: { kind: 'placeholder' },
+  });
+  expect(result.current.board.tiers).toEqual(initial.tiers);
+  expect(result.current.board.gallery).toEqual(initial.gallery);
   expect(openLibraryClient.search).not.toHaveBeenCalled();
 });
 

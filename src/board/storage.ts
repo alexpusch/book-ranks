@@ -1,4 +1,4 @@
-import { bookIdentity, createBoard, GALLERY, type Board } from './board';
+import { createBoard, GALLERY, type Board } from './board';
 import { validateSelection } from './coverSelection';
 import { workPattern } from '../integrations/openLibrary/types';
 
@@ -45,8 +45,8 @@ export function validateBoard(value: unknown): Board {
     return { id: tier.id, name: tier.name, color: tier.color, bookIds: [...tier.bookIds] };
   });
   const ids = [...books.map((book) => book.id), ...tiers.map((tier) => tier.id), GALLERY];
-  if (new Set(ids).size !== ids.length || new Set(books.map(bookIdentity)).size !== books.length) {
-    throw new Error('Duplicate saved identifiers or books.');
+  if (new Set(ids).size !== ids.length) {
+    throw new Error('Duplicate saved identifiers.');
   }
   const placements = [...value.gallery, ...tiers.flatMap((tier) => tier.bookIds)];
   const bookIds = new Set(books.map((book) => book.id));

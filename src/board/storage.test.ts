@@ -44,7 +44,14 @@ describe('browser persistence', () => {
     },
   );
 
-  it('validates identifiers, duplicate books, and exactly-once placement', () => {
+  it('round-trips duplicate books with independent placements', () => {
+    let board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune | Frank Herbert\n dune | FRANK HERBERT');
+    board = moveBook(board, board.gallery[0], 'tier-S');
+    saveBoard(board);
+    expect(loadBoard()).toEqual({ board, warning: null, blocked: false });
+  });
+
+  it('validates identifiers and exactly-once placement', () => {
     const board = importBooks(createBoard(), 'One\nTwo');
     const id = board.gallery[0];
     expect(() => validateBoard({ ...board, gallery: [] })).toThrow('placements');
@@ -52,7 +59,6 @@ describe('browser persistence', () => {
     expect(() => validateBoard({ ...board, gallery: ['missing', board.gallery[1]] })).toThrow('placements');
     expect(() => validateBoard({ ...board, books: [board.books[0], board.books[0]] })).toThrow('Duplicate');
     expect(() => validateBoard({ ...board, tiers: [{ ...board.tiers[0], id }] })).toThrow('Duplicate');
-    expect(() => validateBoard({ ...board, books: [board.books[0], { ...board.books[1], title: ' ONE ' }] })).toThrow('Duplicate');
     expect(() => validateBoard({ ...board, tiers: [{ ...board.tiers[0], color: 'bad' }] })).toThrow('tier');
   });
 

@@ -382,7 +382,7 @@ describe('book list UI', () => {
     expect(saved.books[0].pendingInput).toBeUndefined();
   });
 
-  it('starts with book entry and supports import, drag-only ordering, duplicate rejection, removal, and persistence', async () => {
+  it('starts with book entry and supports import, drag-only ordering, duplicates, removal, and persistence', async () => {
     const user = userEvent.setup();
     render(<App />);
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
@@ -404,13 +404,14 @@ describe('book list UI', () => {
       expect(within(card).queryByRole('button', { name: /^Choose cover/ })).not.toBeInTheDocument();
       expect(card).not.toHaveTextContent(/\d+\s*\/\s*\d+/);
     }
-    await user.type(screen.getByLabelText('Book title and author in natural language'), ' dune | FRANK HERBERT');
+    await user.type(screen.getByLabelText('Book title and author in natural language'), 'Dune | Frank Herbert');
     await user.click(screen.getByRole('button', { name: '+ Add book' }));
-    expect(await screen.findByRole('alert', {}, { timeout: 5000 })).toHaveTextContent('already');
-    expect(within(gallery).queryByText('New book')).not.toBeInTheDocument();
-    await user.click(within(gallery).getByLabelText('Remove Dune'));
-    await user.click(within(gallery).getByRole('button', { name: /^Remove\s+dune \| FRANK HERBERT$/ }));
-    expect(within(gallery).queryByText('Dune')).not.toBeInTheDocument();
+    await waitFor(() => expect(within(gallery).getAllByRole('button', { name: 'Remove Dune' })).toHaveLength(2));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(within(gallery).getAllByRole('article')).toHaveLength(3);
+    await user.click(within(gallery).getAllByRole('button', { name: 'Remove Dune' })[0]);
+    expect(within(gallery).getByRole('button', { name: 'Remove Dune' })).toBeInTheDocument();
+    await user.click(within(gallery).getByRole('button', { name: 'Remove Dune' }));
     await waitFor(() => expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books).toHaveLength(1));
   });
 
@@ -554,7 +555,7 @@ describe('book list UI', () => {
     expect(screen.getByLabelText('Book name')).toHaveValue('Manual draft');
   });
 
-  it('adds structured details without AI, trims whitespace, supports missing authors, and rejects invalid or duplicate books', async () => {
+  it('adds structured details without AI, trims whitespace, supports missing authors and duplicates, and rejects invalid books', async () => {
     vi.stubGlobal('LanguageModel', undefined);
     const user = userEvent.setup();
     render(<App />);
@@ -574,16 +575,15 @@ describe('book list UI', () => {
     await user.type(title, 'piranesi');
     await user.type(author, 'SUSANNA CLARKE');
     await user.click(add);
-    expect(screen.getByRole('alert')).toHaveTextContent('already');
-    expect(title).toHaveValue('piranesi');
-    expect(author).toHaveValue('SUSANNA CLARKE');
-    await user.clear(title);
-    await user.clear(author);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'piranesi by SUSANNA CLARKE' })).toBeInTheDocument();
+    expect(title).toHaveValue('');
+    expect(author).toHaveValue('');
     await user.type(title, 'Another book');
     await user.click(title);
     await user.keyboard('{Enter}');
     expect(screen.getByRole('article', { name: 'Another book by Unknown author' })).toBeInTheDocument();
-    await waitFor(() => expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books).toHaveLength(2));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books).toHaveLength(3));
   });
 
   it('preserves independent drafts across mode changes and collapse, and clears mode-specific errors', async () => {
