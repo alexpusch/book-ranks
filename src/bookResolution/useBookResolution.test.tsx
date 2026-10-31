@@ -7,11 +7,14 @@ import type { WorkCandidate } from '../integrations/openLibrary/types';
 import { useBookResolution } from './useBookResolution';
 
 vi.mock('../integrations/openLibrary/client', () => ({
-  openLibraryClient: { search: vi.fn(), editions: vi.fn() },
+  openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
 }));
 
 beforeEach(() => {
   vi.mocked(openLibraryClient.search).mockReset().mockResolvedValue([]);
+  vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
+    works: await openLibraryClient.search(input, signal), nextCursor: null,
+  }));
 });
 
 function useBoardResolution(initial: Board) {
@@ -84,6 +87,20 @@ it('reports invalid edits without changing the board', () => {
 
   expect(result.current.board).toEqual(initial);
   expect(openLibraryClient.search).not.toHaveBeenCalled();
+});
+
+it('does not publish a chosen work when saving fails', () => {
+  const initial = savedBooks();
+  const change = vi.fn().mockReturnValue(false);
+  const { result } = renderHook(() => useBookResolution(initial, change));
+  act(() => {
+    expect(result.current.selectWork(initial.books[0].id, {
+      id: 'OL2W', title: 'Dune Messiah', authors: ['Frank Herbert'], covers: [],
+      editions: [], nextCursor: null,
+    })).toContain('Could not save');
+  });
+  expect(result.current.states).toEqual({});
+  expect(initial.books[0].matchedWorkId).toBe('OL1W');
 });
 
 it('allows matching another book metadata without merging books or their artwork', () => {

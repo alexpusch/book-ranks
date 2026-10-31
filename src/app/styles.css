@@ -12,6 +12,8 @@
   --page: #f7f5f0;
   --panel: #efeee6;
   --surface: #fffdf8;
+  --multiple-matches-background: #eae5da;
+  --multiple-matches-text: #6d624e;
   --input: #fffefa;
   --input-text: #344139;
   --input-line: #cbd1c1;
@@ -57,6 +59,8 @@
   --page: #161616;
   --panel: #242424;
   --surface: #2c2c2c;
+  --multiple-matches-background: #302b23;
+  --multiple-matches-text: #d8ba78;
   --input: #1c1c1c;
   --input-text: #e6e6e6;
   --input-line: #555555;
@@ -594,6 +598,15 @@ main {
   transition: opacity .18s;
 }
 
+.card-actions.match-review-actions {
+  top: 0;
+  left: 0;
+  right: 0;
+  aspect-ratio: 3 / 4;
+  align-content: center;
+  padding: 8px;
+}
+
 .book-card:hover .card-actions,
 .book-card:focus-within .card-actions {
   opacity: 1;
@@ -959,6 +972,68 @@ main {
 
 .book-editor {
   animation: drawer-slide .22s ease-out;
+}
+
+.multiple-matches-cover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--multiple-matches-background);
+  color: var(--multiple-matches-text);
+  pointer-events: none;
+}
+
+.multiple-matches-cover svg {
+  flex-shrink: 0;
+}
+
+.multiple-matches {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.work-option {
+  position: relative;
+}
+
+.work-choice {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.work-choice::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 5px;
+}
+
+.work-choice:not(:disabled):hover {
+  filter: none;
+}
+
+.work-choice:hover::after,
+.work-choice:focus-visible::after {
+  outline: 2px solid var(--editor-focus);
+  outline-offset: 4px;
+}
+
+.work-choice span {
+  display: block;
+}
+
+.work-option .cover-warning {
+  position: relative;
+  z-index: 1;
 }
 
 .book-editor .book-editor-close {

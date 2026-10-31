@@ -1,4 +1,4 @@
-import { editionPattern, normalize, workPattern, type EditionCandidate, type EditionInput, type EditionPage, type LookupInput, type WorkCandidate } from './types';
+import { editionPattern, normalize, workPattern, type EditionCandidate, type EditionInput, type EditionPage, type LookupInput, type SearchInput, type SearchPage, type WorkCandidate } from './types';
 
 const SEARCH_LIMIT = 10;
 const EDITION_PAGE_SIZE = 20;
@@ -7,6 +7,7 @@ const MAX_BACKOFF_MS = 30_000;
 
 export interface OpenLibraryClient {
   search(input: LookupInput, signal: AbortSignal): Promise<WorkCandidate[]>;
+  searchPage(input: SearchInput, signal: AbortSignal): Promise<SearchPage>;
   editions(input: EditionInput, signal: AbortSignal): Promise<EditionPage>;
 }
 
@@ -184,18 +185,35 @@ export function createOpenLibraryClient(options: OpenLibraryClientOptions = {}):
   }
 
   async function search(input: LookupInput, signal: AbortSignal): Promise<WorkCandidate[]> {
+    return (await searchPage(input, signal)).works;
+  }
+
+  async function searchPage(input: SearchInput, signal: AbortSignal): Promise<SearchPage> {
     if (!input.title.trim() || input.title.length > 500 || (input.author?.length ?? 0) > 300) {
       throw new Error('Search requires a title up to 500 characters and an author up to 300 characters.');
     }
+    const cursor = input.cursor ?? '0';
+    if (!/^(0|[1-9]\d{0,5})$/u.test(cursor)) throw new Error('Invalid search cursor.');
     const url = new URL('https://openlibrary.org/search.json');
     url.searchParams.set('title', input.title.trim());
     const author = input.author?.trim();
     if (author && normalize(author) !== 'unknown author') url.searchParams.set('author', author);
     url.searchParams.set('fields', 'key,title,author_name,cover_i');
     url.searchParams.set('limit', String(SEARCH_LIMIT));
+    url.searchParams.set('offset', cursor);
     const data = record(await request(url, signal));
     if (!Array.isArray(data.docs) || data.docs.length > SEARCH_LIMIT) throw new Error('Malformed search results.');
-    return data.docs.map(parseWork).filter((work) => work !== null);
+    const total = data.numFound ?? data.num_found;
+    if (total !== undefined && (!Number.isSafeInteger(total) || Number(total) < 0)) {
+      throw new Error('Malformed search result count.');
+    }
+    const nextOffset = Number(cursor) + SEARCH_LIMIT;
+    const hasMore = data.docs.length > 0 && (total === undefined
+      ? data.docs.length === SEARCH_LIMIT : nextOffset < Number(total));
+    return {
+      works: data.docs.map(parseWork).filter((work) => work !== null),
+      nextCursor: hasMore ? String(nextOffset) : null,
+    };
   }
 
   async function editions({ workId, cursor = '0' }: EditionInput, signal: AbortSignal): Promise<EditionPage> {
@@ -216,7 +234,7 @@ export function createOpenLibraryClient(options: OpenLibraryClientOptions = {}):
     };
   }
 
-  return { search, editions };
+  return { search, searchPage, editions };
 }
 
 export const openLibraryClient = createOpenLibraryClient();

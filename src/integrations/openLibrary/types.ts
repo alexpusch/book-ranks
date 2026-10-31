@@ -1,4 +1,6 @@
 export interface LookupInput { title: string; author?: string }
+export interface SearchInput extends LookupInput { cursor?: string }
+export interface SearchPage { works: WorkCandidate[]; nextCursor: string | null }
 export interface EditionInput { workId: string; cursor?: string }
 export interface CoverCandidate { coverId: number; editionId?: string }
 export interface EditionCandidate {

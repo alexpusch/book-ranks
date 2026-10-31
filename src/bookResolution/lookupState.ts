@@ -5,6 +5,7 @@ import { normalize, type LookupInput, type WorkCandidate } from '../integrations
 export interface LookupResult {
   outcome: 'matched' | 'needs-review' | 'not-found' | 'error';
   works: WorkCandidate[]; selection?: CoverSelection;
+  nextSearchCursor?: string | null;
   warning?: string; error?: string;
 }
 

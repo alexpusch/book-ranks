@@ -11,6 +11,44 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+it('loads explicit search pages and uses the total count to stop at the final page', async () => {
+  fetcher.mockResolvedValueOnce(response({ docs: Array(10).fill(doc), numFound: 12 }))
+    .mockResolvedValueOnce(response({ docs: [doc, { ...doc, key: '/works/OL2W' }], numFound: 12 }));
+  const client = createOpenLibraryClient({ fetch: fetcher });
+  const first = client.searchPage({ title: 'Dune', author: 'Frank Herbert' }, signal());
+  await vi.runAllTimersAsync();
+  expect(await first).toMatchObject({ nextCursor: '10' });
+  expect(fetcher).toHaveBeenCalledOnce();
+  const second = client.searchPage({ title: 'Dune', author: 'Frank Herbert', cursor: '10' }, signal());
+  await vi.runAllTimersAsync();
+  expect(await second).toMatchObject({ works: [{ id: 'OL1W' }, { id: 'OL2W' }], nextCursor: null });
+  expect(new URL(String(fetcher.mock.calls[1][0])).searchParams.get('offset')).toBe('10');
+  expect(new URL(String(fetcher.mock.calls[1][0])).searchParams.get('author')).toBe('Frank Herbert');
+});
+
+it('keeps raw page offsets after filtering legacy editions and tolerates absent optional counts', async () => {
+  fetcher.mockResolvedValueOnce(response({
+    docs: Array.from({ length: 10 }, (_, index) => index === 0 ? doc : { ...doc, key: `/works/OL${index}M` }),
+  }));
+  const task = createOpenLibraryClient({ fetch: fetcher }).searchPage({ title: 'Dune' }, signal());
+  await Promise.all([
+    expect(task).resolves.toMatchObject({ works: [{ id: 'OL1W' }], nextCursor: '10' }),
+    vi.runAllTimersAsync(),
+  ]);
+});
+
+it.each([-1, '12', 1.5])('rejects invalid search result counts (%s)', async (numFound) => {
+  fetcher.mockResolvedValueOnce(response({ docs: [doc], numFound }));
+  const task = createOpenLibraryClient({ fetch: fetcher }).searchPage({ title: 'Dune' }, signal());
+  await Promise.all([expect(task).rejects.toThrow('Malformed search result count'), vi.runAllTimersAsync()]);
+});
+
+it.each(['-1', '01', 'abc', '1000000'])('rejects invalid search cursors (%s) before requesting', async (cursor) => {
+  await expect(createOpenLibraryClient({ fetch: fetcher }).searchPage({ title: 'Dune', cursor }, signal()))
+    .rejects.toThrow('Invalid search cursor');
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
 it('uses direct bounded searches with minimal fields and no browser-forbidden contact header', async () => {
   const client = createOpenLibraryClient({ fetch: fetcher });
   const result = client.search({ title: ' Dune ', author: 'Unknown author' }, signal());

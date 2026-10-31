@@ -9,7 +9,7 @@ import { openLibraryClient } from '../integrations/openLibrary/client';
 import * as localCover from '../books/localCover';
 
 vi.mock('../integrations/openLibrary/client', () => ({
-  openLibraryClient: { search: vi.fn(), editions: vi.fn() },
+  openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
 }));
 const search = vi.mocked(openLibraryClient.search);
 const editions = vi.mocked(openLibraryClient.editions);
@@ -24,6 +24,9 @@ const edition = {
 beforeEach(() => {
   localStorage.clear();
   search.mockReset().mockResolvedValue([]);
+  vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
+    works: await search(input, signal), nextCursor: null,
+  }));
   editions.mockReset().mockResolvedValue({ editions: [edition], nextCursor: null });
 });
 function persist(board: Board) {
@@ -43,6 +46,202 @@ async function edit() {
   await userEvent.click(screen.getByRole('button', { name: 'Edit Dune' }));
   return screen.getByRole('dialog');
 }
+
+const otherWork: WorkCandidate = {
+  id: 'OL2W', title: 'Dune Messiah', authors: ['Frank Herbert'], covers: [{ coverId: 789 }],
+  editions: [], nextCursor: '0',
+};
+
+it('appends more matches, deduplicates work IDs, and pages the submitted query rather than edited drafts', async () => {
+  seed();
+  const thirdWork = { ...work, id: 'OL3W', title: 'Children of Dune' };
+  const page = vi.mocked(openLibraryClient.searchPage);
+  page.mockResolvedValueOnce({ works: [work, otherWork], nextCursor: '10' })
+    .mockResolvedValueOnce({ works: [otherWork, thirdWork, thirdWork], nextCursor: '20' })
+    .mockResolvedValueOnce({ works: [], nextCursor: null });
+  render(<App />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
+  const dialog = screen.getByRole('dialog');
+  const gallery = within(dialog).getByRole('group', { name: 'Book match gallery' });
+  expect(page).toHaveBeenCalledOnce();
+  await userEvent.type(within(dialog).getByLabelText('Book title'), ' draft');
+  await userEvent.clear(within(dialog).getByLabelText('Author'));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+  expect(page).toHaveBeenLastCalledWith({
+    title: 'Dune', author: 'Frank Herbert', cursor: '10',
+  }, expect.any(AbortSignal));
+  expect(await within(gallery).findByRole('button', { name: 'Select Children of Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(within(gallery).getAllByRole('button')).toHaveLength(3);
+  expect(gallery.querySelector(`img[src="${coverUrl(789)}"]`)).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+  expect(page).toHaveBeenLastCalledWith({
+    title: 'Dune', author: 'Frank Herbert', cursor: '20',
+  }, expect.any(AbortSignal));
+  expect(await within(dialog).findByText('All matching works loaded.')).toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
+  expect(within(gallery).getAllByRole('button')).toHaveLength(3);
+  await userEvent.click(within(gallery).getByRole('button', { name: 'Select Children of Dune by Frank Herbert' }));
+  expect(saved().books[0]).toMatchObject({ title: 'Children of Dune', matchedWorkId: 'OL3W' });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
+
+it('keeps earlier matches on a pagination failure and retries the same page', async () => {
+  const board = seed();
+  const page = vi.mocked(openLibraryClient.searchPage);
+  page.mockResolvedValueOnce({ works: [work, otherWork], nextCursor: '10' })
+    .mockRejectedValueOnce(new Error('More results offline'))
+    .mockResolvedValueOnce({ works: [{ ...work, id: 'OL3W', title: 'Children of Dune' }], nextCursor: null });
+  render(<App />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
+  const dialog = screen.getByRole('dialog');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('More results offline');
+  expect(within(dialog).getByRole('button', { name: 'Select Dune by Frank Herbert' })).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+  expect(await within(dialog).findByRole('button', { name: 'Select Children of Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(page.mock.calls[1][0].cursor).toBe('10');
+  expect(page.mock.calls[2][0].cursor).toBe('10');
+  expect(saved().books[0]).toEqual(board.books[0]);
+});
+
+it('refining a search cancels pagination, resets its cursor, and ignores its late page', async () => {
+  seed();
+  let finish!: (works: { works: WorkCandidate[]; nextCursor: string | null }) => void;
+  const page = vi.mocked(openLibraryClient.searchPage);
+  page.mockResolvedValueOnce({ works: [work, otherWork], nextCursor: '10' })
+    .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+    .mockResolvedValueOnce({ works: [otherWork], nextCursor: '10' });
+  render(<App />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
+  const dialog = screen.getByRole('dialog');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+  expect(within(dialog).getByRole('button', { name: 'Loading more...' })).toBeDisabled();
+  expect(page).toHaveBeenCalledTimes(2);
+  await userEvent.clear(within(dialog).getByLabelText('Book title'));
+  await userEvent.type(within(dialog).getByLabelText('Book title'), 'Dune Messiah');
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Search' }));
+  expect(page.mock.calls[1][1].aborted).toBe(true);
+  expect(page).toHaveBeenLastCalledWith({ title: 'Dune Messiah', author: 'Frank Herbert' }, expect.any(AbortSignal));
+  await act(async () => finish({ works: [work], nextCursor: '20' }));
+  expect(within(dialog).queryByRole('button', { name: 'Select Dune by Frank Herbert' })).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Select Dune Messiah by Frank Herbert' })).toBeInTheDocument();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
+  expect(page).toHaveBeenLastCalledWith({
+    title: 'Dune Messiah', author: 'Frank Herbert', cursor: '10',
+  }, expect.any(AbortSignal));
+});
+
+it.each(['available', 'unavailable'] as const)('reviews multiple manual matches with Chrome AI %s, then persists the selected book', async (availability) => {
+  vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
+  const board = seed();
+  search.mockResolvedValueOnce([work, otherWork]);
+  const rendered = render(<App />);
+  const label = await screen.findByText('Multiple matches');
+  const card = label.closest('article')!;
+  expect(within(card).getAllByRole('button')).toHaveLength(2);
+  expect(within(card).queryByRole('button', { name: 'Drag Dune' })).not.toBeInTheDocument();
+  expect(within(card).queryByRole('button', { name: 'Edit Dune' })).not.toBeInTheDocument();
+  expect(saved().books[0]).toEqual(board.books[0]);
+  expect(editions).not.toHaveBeenCalled();
+  expect(window.LanguageModel!.create).not.toHaveBeenCalled();
+  await userEvent.click(within(card).getByRole('button', { name: 'Review Dune' }));
+  const dialog = screen.getByRole('dialog', { name: 'Review book matches' });
+  expect(within(dialog).getByLabelText('Book title')).toHaveValue('Dune');
+  expect(within(dialog).getByLabelText('Author')).toHaveValue('Frank Herbert');
+  const gallery = within(dialog).getByRole('group', { name: 'Book match gallery' });
+  expect(gallery.querySelector(`img[src="${coverUrl(123)}"]`)).toBeInTheDocument();
+  expect(gallery.querySelector(`img[src="${coverUrl(789)}"]`)).toBeInTheDocument();
+  await userEvent.click(within(gallery).getByRole('button', { name: 'Select Dune Messiah by Frank Herbert' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(screen.queryByText('Multiple matches')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Drag Dune Messiah' })).toBeInTheDocument();
+  expect(saved().books[0]).toMatchObject({
+    id: board.books[0].id, title: 'Dune Messiah', author: 'Frank Herbert', matchedWorkId: 'OL2W',
+    coverSelection: { kind: 'open-library', workId: 'OL2W', coverId: 789 },
+  });
+  expect(saved().tiers).toEqual(board.tiers);
+  expect(saved().gallery).toEqual(board.gallery);
+  rendered.unmount();
+  search.mockClear();
+  render(<App />);
+  expect(screen.getByRole('button', { name: 'Edit Dune Messiah' })).toBeInTheDocument();
+  expect(search).not.toHaveBeenCalled();
+});
+
+it('refines review searches without changing the book until choosing a result, including results without covers', async () => {
+  const board = seed();
+  search.mockResolvedValueOnce([work, otherWork]).mockResolvedValueOnce([{ ...otherWork, covers: [] }]);
+  render(<App />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
+  const dialog = screen.getByRole('dialog');
+  await userEvent.clear(within(dialog).getByLabelText('Book title'));
+  await userEvent.type(within(dialog).getByLabelText('Book title'), 'Dune Messiah');
+  await userEvent.clear(within(dialog).getByLabelText('Author'));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Search' }));
+  expect(search).toHaveBeenLastCalledWith({ title: 'Dune Messiah', author: undefined }, expect.any(AbortSignal));
+  const option = await within(dialog).findByRole('button', { name: 'Select Dune Messiah by Frank Herbert' });
+  expect(within(dialog).queryByRole('button', { name: 'Select Dune by Frank Herbert' })).not.toBeInTheDocument();
+  expect(saved().books[0]).toEqual(board.books[0]);
+  await userEvent.click(option);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(saved().books[0].matchedWorkId).toBe('OL2W');
+  expect(saved().books[0].coverSelection).toBeUndefined();
+  expect(editions).not.toHaveBeenCalled();
+});
+
+it('shows empty results and search errors in review and allows retry', async () => {
+  const board = seed();
+  search.mockResolvedValueOnce([work, otherWork]).mockResolvedValueOnce([])
+    .mockRejectedValueOnce(new Error('Open Library offline')).mockResolvedValueOnce([work]);
+  render(<App />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
+  const dialog = screen.getByRole('dialog');
+  const button = within(dialog).getByRole('button', { name: 'Search' });
+  await userEvent.click(button);
+  expect(await within(dialog).findByRole('status')).toHaveTextContent('No matching works found');
+  await userEvent.click(button);
+  expect(await within(dialog).findByRole('alert')).toHaveTextContent('Open Library offline');
+  await userEvent.click(button);
+  expect(await within(dialog).findByRole('button', { name: 'Select Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+  expect(saved().books[0]).toEqual(board.books[0]);
+});
+
+it('cancels replaced review searches and closing the reviewer ignores late results', async () => {
+  const board = seed();
+  let finishFirst!: (works: WorkCandidate[]) => void;
+  let finishSecond!: (works: WorkCandidate[]) => void;
+  search.mockResolvedValueOnce([work, otherWork])
+    .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
+    .mockImplementationOnce(() => new Promise((resolve) => { finishSecond = resolve; }));
+  render(<App />);
+  await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
+  const button = screen.getByRole('button', { name: 'Search' });
+  await userEvent.click(button);
+  const firstSignal = search.mock.calls[1][1];
+  await userEvent.click(button);
+  expect(firstSignal.aborted).toBe(true);
+  await act(async () => finishFirst([work]));
+  expect(screen.queryByRole('button', { name: 'Select Dune by Frank Herbert' })).not.toBeInTheDocument();
+  expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('Searching Open Library');
+  const secondSignal = search.mock.calls[2][1];
+  await userEvent.click(screen.getByRole('button', { name: 'Close book review' }));
+  expect(secondSignal.aborted).toBe(true);
+  await act(async () => finishSecond([otherWork]));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(saved().books[0]).toEqual(board.books[0]);
+});
+
+it('removes unresolved multiple-match books from the gallery', async () => {
+  const board = importBooks(createBoard(), 'Dune | Frank Herbert');
+  persist(board);
+  search.mockResolvedValueOnce([work, otherWork]);
+  render(<App />);
+  await screen.findByText('Multiple matches');
+  await userEvent.click(screen.getByRole('button', { name: 'Remove Dune' }));
+  expect(saved().books).toHaveLength(0);
+  expect(screen.queryByRole('button', { name: 'Review Dune' })).not.toBeInTheDocument();
+});
 
 it('opens the upload picker and applies local artwork without changing metadata or placements', async () => {
   const board = seed();

@@ -11,10 +11,11 @@ interface BookCardProps {
 }
 
 export function BookCard({ book, location, onRemove }: BookCardProps) {
-  const { states, choose, retry } = useBooks();
+  const { states, choose, review, retry } = useBooks();
   const state = states[book.id];
+  const multipleMatches = state?.outcome === 'needs-review' && state.works.length > 1 && !book.coverSelection;
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
-    useSortable({ id: book.id, data: { kind: 'book', location } });
+    useSortable({ id: book.id, disabled: multipleMatches, data: { kind: 'book', location } });
   return (
     <article
       className={`book-card ${isDragging ? 'is-dragging' : ''}`}
@@ -24,18 +25,20 @@ export function BookCard({ book, location, onRemove }: BookCardProps) {
       aria-label={book.pendingInput ?? `${book.title} by ${book.author}`}
     >
       <div className="book-content">
-        <BookContent book={book} />
+        <BookContent book={book} multipleMatches={multipleMatches} />
       </div>
-      <div className="card-actions">
-        <button className="book-drag-surface" ref={setActivatorNodeRef} {...attributes} {...listeners}
+      <div className={`card-actions${multipleMatches ? ' match-review-actions' : ''}`}>
+        {!multipleMatches && <button className="book-drag-surface" ref={setActivatorNodeRef} {...attributes} {...listeners}
           aria-label={`Drag ${book.title}`} title="Drag to rank; or press Space, use arrows, then Space to drop">
           <svg viewBox="0 0 24 16" width="24" height="16" fill="currentColor" aria-hidden="true">
             {[5, 12, 19].flatMap((x) => [4, 12].map((y) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" />))}
           </svg>
-        </button>
-        <button className="icon-button edit-book" aria-label={`Edit ${book.title}`} onClick={() => choose(book.id)}>
+        </button>}
+        <button className="icon-button edit-book" aria-label={`${multipleMatches ? 'Review' : 'Edit'} ${book.title}`}
+          onClick={() => multipleMatches ? review(book.id) : choose(book.id)}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-            <path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14Z" />
+            {multipleMatches ? <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>
+              : <path d="m15 4 5 5M4 20l5-1L20 8a2 2 0 0 0-5-5L4 14Z" />}
           </svg>
         </button>
         <button className="icon-button remove-book" aria-label={`Remove ${book.title}`} onClick={() => onRemove(book.id)}>×</button>
@@ -54,7 +57,7 @@ export function BookCard({ book, location, onRemove }: BookCardProps) {
           </svg> : <span className="cover-spinner" aria-hidden="true" />}
         </span>}
       <div className="cover-action">
-        {!book.coverSelection && state?.outcome === 'needs-review' && <span>Review required</span>}
+        {!multipleMatches && !book.coverSelection && state?.outcome === 'needs-review' && <span>Review required</span>}
         {!book.coverSelection && state?.outcome === 'not-found' && <span>No match</span>}
         {book.coverSelection?.kind === 'open-library'}
         {state && 'warning' in state && state.warning && <span>{state.warning}</span>}

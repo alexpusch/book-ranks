@@ -10,12 +10,15 @@ import { openLibraryClient } from '../integrations/openLibrary/client';
 
 vi.mock('../export/exportJpeg', async (importOriginal) => ({ ...await importOriginal<typeof import('../export/exportJpeg')>(), exportJpeg: vi.fn() }));
 vi.mock('../integrations/openLibrary/client', () => ({
-  openLibraryClient: { search: vi.fn(), editions: vi.fn() },
+  openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
 }));
 
 beforeEach(() => {
   localStorage.clear();
   vi.mocked(openLibraryClient.search).mockReset().mockResolvedValue([]);
+  vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
+    works: await openLibraryClient.search(input, signal), nextCursor: null,
+  }));
   vi.mocked(openLibraryClient.editions).mockReset().mockResolvedValue({ editions: [], nextCursor: null });
 });
 

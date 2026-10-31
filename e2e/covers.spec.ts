@@ -3,6 +3,117 @@ import { expect, test } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { createBoard, importBooks, moveBook } from '../src/board/board';
 
+test('review Show more fetches the next ten results only on click and appends them', async ({ page }) => {
+  const offsets: string[] = [];
+  await page.route('https://covers.openlibrary.org/**', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.route('https://openlibrary.org/search.json?**', async (route) => {
+    const offset = new URL(route.request().url()).searchParams.get('offset')!;
+    offsets.push(offset);
+    const docs = Array.from({ length: 12 }, (_, index) => ({
+      key: `/works/OL${index + 1}W`, title: `Dune ${index + 1}`, author_name: ['Frank Herbert'],
+    }));
+    await route.fulfill({ json: { docs: docs.slice(Number(offset), Number(offset) + 10), numFound: 12 } });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Manual entry', exact: true }).click();
+  await page.getByLabel('Book name', { exact: true }).fill('Dune');
+  await page.getByRole('button', { name: '+ Add book' }).click();
+  const card = page.getByRole('article', { name: 'Dune by Unknown author', exact: true });
+  await card.hover();
+  await card.getByRole('button', { name: 'Review Dune' }).click();
+  const review = page.getByRole('dialog', { name: 'Review book matches' });
+  const gallery = review.getByRole('group', { name: 'Book match gallery' });
+  await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(10);
+  expect(offsets).toEqual(['0']);
+  await review.getByRole('button', { name: 'Show more', exact: true }).click();
+  await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(12);
+  expect(offsets).toEqual(['0', '10']);
+  await expect(review.getByRole('button', { name: 'Show more' })).toHaveCount(0);
+  await gallery.getByRole('button', { name: 'Select Dune 12 by Frank Herbert', exact: true }).click();
+  await expect(review).toHaveCount(0);
+  await expect(page.getByRole('article', { name: 'Dune 12 by Frank Herbert', exact: true })).toBeVisible();
+});
+
+for (const width of [1360, 390]) {
+  test(`manual multiple matches open a right reviewer and refined selection persists at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const searches: { title: string | null; author: string | null }[] = [];
+    let editionRequests = 0;
+    await page.route('https://openlibrary.org/works/**', async (route) => {
+      editionRequests++;
+      await route.fulfill({ json: { entries: [] } });
+    });
+    await page.route('https://covers.openlibrary.org/**', (route) => route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64'),
+    }));
+    await page.route('https://openlibrary.org/search.json?**', async (route) => {
+      const params = new URL(route.request().url()).searchParams;
+      searches.push({ title: params.get('title'), author: params.get('author') });
+      const docs = [
+        { key: '/works/OL1W', title: 'Dune', author_name: ['Frank Herbert'], cover_i: 123 },
+        { key: '/works/OL2W', title: 'Dune Messiah', author_name: ['Frank Herbert'], cover_i: 789 },
+      ];
+      await route.fulfill({ json: { docs: params.get('title') === 'Dune Messiah' ? [docs[1]] : docs } });
+    });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Manual entry', exact: true }).click();
+    await page.getByLabel('Book name', { exact: true }).fill('Dune');
+    await page.getByLabel('Author', { exact: false }).fill('Frank Herbert');
+    await page.getByRole('button', { name: '+ Add book' }).click();
+    const card = page.getByRole('article', { name: 'Dune by Frank Herbert', exact: true });
+    await expect(card.getByText('Multiple matches')).toBeVisible();
+    await expect(card.locator('img')).toHaveCount(0);
+    const coverBounds = (await card.locator('.multiple-matches-cover').boundingBox())!;
+    const iconBounds = (await card.locator('.multiple-matches-cover svg').boundingBox())!;
+    const badgeBounds = (await card.locator('.multiple-matches').boundingBox())!;
+    expect(badgeBounds.x).toBeGreaterThanOrEqual(coverBounds.x);
+    expect(badgeBounds.y).toBeGreaterThanOrEqual(coverBounds.y);
+    expect(badgeBounds.x + badgeBounds.width).toBeLessThanOrEqual(coverBounds.x + coverBounds.width);
+    expect(badgeBounds.y + badgeBounds.height).toBeLessThanOrEqual(coverBounds.y + coverBounds.height);
+    expect(iconBounds.width).toBeGreaterThanOrEqual(50);
+    expect(iconBounds.y + iconBounds.height).toBeLessThanOrEqual(badgeBounds.y);
+    expect(Math.abs(badgeBounds.x + badgeBounds.width / 2 - (coverBounds.x + coverBounds.width / 2))).toBeLessThan(1);
+    await card.hover();
+    await expect(card.locator('.card-actions button')).toHaveCount(2);
+    const reviewButtonBounds = (await card.getByRole('button', { name: 'Review Dune' }).boundingBox())!;
+    const removeButtonBounds = (await card.getByRole('button', { name: 'Remove Dune' }).boundingBox())!;
+    const coverCenterY = coverBounds.y + coverBounds.height / 2;
+    expect(Math.abs(reviewButtonBounds.y + reviewButtonBounds.height / 2 - coverCenterY)).toBeLessThan(1);
+    expect(Math.abs(removeButtonBounds.y + removeButtonBounds.height / 2 - coverCenterY)).toBeLessThan(1);
+    expect(Math.abs((reviewButtonBounds.x + removeButtonBounds.x + removeButtonBounds.width) / 2
+      - (coverBounds.x + coverBounds.width / 2))).toBeLessThan(1);
+    await expect(card.getByRole('button', { name: 'Drag Dune' })).toHaveCount(0);
+    await card.getByRole('button', { name: 'Review Dune' }).click();
+    const review = page.getByRole('dialog', { name: 'Review book matches' });
+    await expect(review).toBeVisible();
+    await expect.poll(async () => {
+      const bounds = await review.boundingBox();
+      return bounds && bounds.x + bounds.width;
+    }).toBe(width);
+    expect((await review.boundingBox())!.width).toBeLessThanOrEqual(width);
+    const gallery = review.getByRole('group', { name: 'Book match gallery' });
+    await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(2);
+    await expect(gallery.locator('img').first()).toHaveAttribute('src', /\/123-M\.jpg/);
+    await review.getByLabel('Book title').fill('Dune Messiah');
+    await review.getByLabel('Author', { exact: true }).fill('');
+    await review.getByRole('button', { name: 'Search', exact: true }).click();
+    await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(1);
+    expect(searches).toEqual([
+      { title: 'Dune', author: 'Frank Herbert' }, { title: 'Dune Messiah', author: null },
+    ]);
+    await gallery.locator('.work-option').click({ position: { x: 20, y: 20 } });
+    await expect(review).toHaveCount(0);
+    const chosen = page.getByRole('article', { name: 'Dune Messiah by Frank Herbert', exact: true });
+    await expect(chosen.getByRole('button', { name: 'Drag Dune Messiah' })).toBeAttached();
+    expect(editionRequests).toBe(0);
+    await page.reload();
+    await expect(chosen).toBeVisible();
+    await expect(chosen.locator('img')).toHaveAttribute('src', /\/789-M\.jpg/);
+    expect(searches).toHaveLength(2);
+  });
+}
+
 test('title-only Chrome AI entry matches Children of Ruin despite a legacy edition search result', async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => {
