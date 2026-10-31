@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { importBooks, queueBook, type Board, type BoardChange } from '../board/board';
 import { getModelDownloadProgress, subscribeModelDownload } from '../integrations/chromeAi/prompt';
+import { useStoredPreference } from '../app/useStoredPreference';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
@@ -10,7 +11,8 @@ export function BookEntry({ board, onChange, onNotice }: {
   board: Board; onChange: BoardChange; onNotice: (notice: string) => void;
 }) {
   const [input, setInput] = useState('');
-  const [selectedEntryMode, setEntryMode] = useState<'ai' | 'structured' | null>(null);
+  const preference = useStoredPreference('shelf-life.entry-mode', ['ai', 'structured'], null);
+  const [selectedEntryMode, setEntryMode] = useState(preference.value);
   const [aiAvailable, setAiAvailable] = useState(false);
   const [aiReady, setAiReady] = useState(false);
   const entryMode = aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
@@ -50,12 +52,20 @@ export function BookEntry({ board, onChange, onNotice }: {
           setTitle('');
           setAuthor('');
         }
+
         onNotice('Added 1 book to your reading pile.');
       }
     } catch (error) {
       setInputError(`Could not add book. ${errorMessage(error)}`);
     }
   }
+
+  function selectEntryMode(mode: 'ai' | 'structured') {
+    setEntryMode(mode);
+    preference.select(mode);
+    setInputError('');
+  }
+
   return (
     <section className="entry-panel" aria-labelledby="entry-title" data-collapsed={!entryOpen}>
       <h2 id="entry-title">
@@ -73,9 +83,9 @@ export function BookEntry({ board, onChange, onNotice }: {
       }}>
         {aiAvailable && <div className="entry-modes" role="group" aria-label="Book addition mode">
           <button type="button" aria-pressed={entryMode === 'structured'}
-            onClick={() => { setEntryMode('structured'); setInputError(''); }}>Manual entry</button>
+            onClick={() => selectEntryMode('structured')}>Manual entry</button>
           <button type="button" aria-pressed={entryMode === 'ai'}
-            onClick={() => { setEntryMode('ai'); setInputError(''); }}>AI assisted</button>
+            onClick={() => selectEntryMode('ai')}>AI assisted</button>
         </div>}
         <p className="entry-mode-help" id="entry-mode-help">{entryMode === 'ai'
           ? <>Uses Chrome's built-in, on-device LLM to clean up your book details. {!aiReady && <span className="model-download-warning">
@@ -110,6 +120,7 @@ export function BookEntry({ board, onChange, onNotice }: {
         </div>}
         {inputError && <p className="field-error" id="input-error" role="alert">{inputError}</p>}
       </form>
+      {preference.warning && <p className="field-error" role="alert">{preference.warning}</p>}
     </section>
   );
 }

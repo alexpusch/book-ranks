@@ -20,6 +20,95 @@ beforeEach(() => {
 });
 
 describe('book list UI', () => {
+  it('restores both dark and light theme choices after remounting', async () => {
+    const user = userEvent.setup();
+    let app = render(<App />);
+    for (const dark of [true, false]) {
+      await user.click(screen.getByRole('switch', { name: dark ? 'Dark mode' : 'Light mode' }));
+      expect(localStorage.getItem('shelf-life.theme')).toBe(dark ? 'dark' : 'light');
+      app.unmount();
+      app = render(<App />);
+      expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', String(dark));
+      expect(document.documentElement).toHaveAttribute('data-theme', dark ? 'dark' : 'light');
+    }
+  });
+
+  it.each(['Manual entry', 'AI assisted'])('restores the explicit %s choice instead of the AI default', async (mode) => {
+    const user = userEvent.setup();
+    const app = render(<App />);
+    await user.click(await screen.findByRole('button', { name: mode }));
+    expect(localStorage.getItem('shelf-life.entry-mode')).toBe(mode === 'Manual entry' ? 'structured' : 'ai');
+    app.unmount();
+    vi.stubGlobal('LanguageModel', { availability: vi.fn().mockResolvedValue('downloadable') });
+    render(<App />);
+    expect(await screen.findByRole('button', { name: mode })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('uses manual entry when AI is unavailable without losing the saved AI choice', async () => {
+    localStorage.setItem('shelf-life.entry-mode', 'ai');
+    vi.stubGlobal('LanguageModel', undefined);
+    const app = render(<App />);
+    expect(screen.getByLabelText('Book name')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
+    await userEvent.setup().type(screen.getByLabelText('Book name'), 'Manual draft');
+    expect(localStorage.getItem('shelf-life.entry-mode')).toBe('ai');
+    app.unmount();
+    vi.stubGlobal('LanguageModel', { availability: vi.fn().mockResolvedValue('available') });
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('does not persist automatic entry defaults', async () => {
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem('shelf-life.entry-mode')).toBeNull();
+    expect(localStorage.getItem('shelf-life.theme')).toBeNull();
+  });
+
+  it('reports invalid saved preferences and replaces them only on explicit selection', async () => {
+    localStorage.setItem('shelf-life.theme', 'invalid');
+    localStorage.setItem('shelf-life.entry-mode', 'invalid');
+    const user = userEvent.setup();
+    render(<App />);
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(localStorage.getItem('shelf-life.theme')).toBe('invalid');
+    await user.click(screen.getByRole('switch'));
+    await user.click(await screen.findByRole('button', { name: 'Manual entry' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(localStorage.getItem('shelf-life.theme')).toBe('dark');
+    expect(localStorage.getItem('shelf-life.entry-mode')).toBe('structured');
+  });
+
+  it('reports preference write failures while still switching modes', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('button', { name: 'Manual entry' });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage full'); });
+    await user.click(screen.getByRole('switch'));
+    await user.click(screen.getByRole('button', { name: 'Manual entry' }));
+    expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
+    expect(screen.getByLabelText('Book name')).toBeVisible();
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    for (const alert of screen.getAllByRole('alert')) {
+      expect(alert).toHaveTextContent('Could not save your preference. Storage full');
+    }
+  });
+
+  it('reports preference read failures while retaining usable defaults', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation((key) => {
+      if (key === STORAGE_KEY) return null;
+      throw new Error('Storage unavailable');
+    });
+    render(<App />);
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('alert')).toHaveLength(2);
+    for (const alert of screen.getAllByRole('alert')) {
+      expect(alert).toHaveTextContent('Could not load your preference. Storage unavailable');
+    }
+  });
+
   it('toggles dark mode next to tier settings and exports the current theme', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);

@@ -11,6 +11,7 @@ import { ExportBoard } from '../export/ExportBoard';
 import { CoverExportError, exportJpeg } from '../export/exportJpeg';
 import { GALLERY, moveBook, removeBook } from '../board/board';
 import { useBoard } from './useBoard';
+import { useStoredPreference } from './useStoredPreference';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
@@ -20,7 +21,8 @@ export function App() {
   const [notice, setNotice] = useState('');
   const { board, boardRef, change, storageBlocked, storageWarning, retryStorage, actionError, setActionError } = useBoard(setNotice);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const theme = useStoredPreference('shelf-life.theme', ['light', 'dark'], 'light');
+  const darkMode = theme.value === 'dark';
   const [exporting, setExporting] = useState(false);
   const [coverExportFailed, setCoverExportFailed] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,7 @@ export function App() {
   return (
     <BookProvider board={board} onChange={change}>
       <main>
+        {theme.warning && <div className="warning-banner" role="alert">{theme.warning}</div>}
         {storageWarning && <div className="warning-banner" role="alert"><div><strong>Browser storage needs attention</strong><p>{storageWarning}</p></div>
           <button className="secondary-button" onClick={retryStorage}>{storageBlocked ? 'Reset saved data and current list' : 'Retry saving'}</button></div>}
         <BookEntry board={board} onChange={change} onNotice={setNotice} />
@@ -76,7 +79,7 @@ export function App() {
                 <button className="secondary-button" onClick={() => setSettingsOpen(true)}>⚙ Tier settings</button>
                 <button className="theme-toggle" type="button" role="switch" aria-checked={darkMode}
                   aria-label={darkMode ? 'Light mode' : 'Dark mode'} title={darkMode ? 'Light mode' : 'Dark mode'}
-                  onClick={() => setDarkMode((dark) => !dark)}>
+                  onClick={() => theme.select(darkMode ? 'light' : 'dark')}>
                   <span className="theme-switch-track" aria-hidden="true">
                     <span className="theme-switch-thumb">
                       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7">
