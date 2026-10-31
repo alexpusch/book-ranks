@@ -33,7 +33,7 @@ describe('book list UI', () => {
     board = moveBook(board, three, 'tier-E');
     localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
     const app = render(<App />);
-    const button = screen.getByRole('button', { name: 'Clear all' });
+    const button = within(screen.getByRole('region', { name: 'Rank the books' })).getByRole('button', { name: 'Clear all' });
     expect(button).toBeEnabled();
     expect(button.parentElement).toHaveTextContent('3 of 4 books ranked');
     expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
@@ -59,7 +59,41 @@ describe('book list UI', () => {
 
   it('disables clearing when there are no ranked books', () => {
     render(<App />);
-    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled();
+    expect(within(screen.getByRole('region', { name: 'Rank the books' })).getByRole('button', { name: 'Clear all' })).toBeDisabled();
+  });
+
+  it('clears unranked books above the gallery, preserving ranks and drafts across reload', async () => {
+    window.history.replaceState(null, '', '/');
+    let board = importBooks(createBoard(), 'One\nTwo\nThree');
+    board.books.forEach((book) => { book.coverSelection = { kind: 'placeholder' }; });
+    board = moveBook(board, board.gallery[1], 'tier-S');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
+    const user = userEvent.setup();
+    const app = render(<App />);
+    const entry = screen.getByRole('region', { name: 'Add books' });
+    const gallery = screen.getByRole('region', { name: 'Your books' });
+    const button = within(gallery).getByRole('button', { name: 'Clear all' });
+    expect(within(entry).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument();
+    expect(button.parentElement).toHaveClass('gallery-toolbar');
+    expect(button).toBeEnabled();
+    await user.type(screen.getByLabelText('Book name'), 'Manual draft');
+    await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
+    await user.type(screen.getByLabelText('Books to add'), 'Bulk draft');
+    await user.click(button);
+    expect(button).toBeDisabled();
+    expect(screen.getByLabelText('Books to add')).toHaveValue('Bulk draft');
+    await user.click(screen.getByRole('button', { name: 'Manual entry' }));
+    expect(screen.getByLabelText('Book name')).toHaveValue('Manual draft');
+    expect(within(screen.getByRole('region', { name: 'Your books' })).queryByRole('article')).not.toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' })).toBeVisible();
+    expect(screen.getByText('1 of 1 books ranked')).toBeVisible();
+    expect(screen.getByText('All unranked books removed from your reading pile.')).toHaveAttribute('role', 'status');
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({ ...board, books: [board.books[1]], gallery: [] });
+    app.unmount();
+    render(<App />);
+    expect(within(screen.getByRole('region', { name: 'Your books' })).getByRole('button', { name: 'Clear all' })).toBeDisabled();
+    expect(screen.getByText('1 of 1 books ranked')).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' })).toBeVisible();
   });
 
   it.each(['/', '/?ai=false', '/?ai=', '/?ai=True', '/?other=true', '/?other=ai%3Dtrue'])(
@@ -283,25 +317,18 @@ describe('book list UI', () => {
     });
   });
 
-  it('starts expanded and supports collapsing and reopening book entry without losing pasted text', async () => {
+  it('keeps book entry visible with a non-interactive heading', async () => {
     const user = userEvent.setup();
     render(<App />);
-    const toggle = screen.getByRole('button', { name: 'Add books' });
+    const heading = screen.getByRole('heading', { name: 'Add books' });
     const input = await screen.findByLabelText('Book title and author in natural language');
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: 'Add books' })).not.toBeInTheDocument();
     expect(input).toBeVisible();
     await user.type(input, 'My pasted books');
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(input).not.toBeVisible();
-    expect(screen.queryByRole('button', { name: /^\+ Add books?$/ })).not.toBeInTheDocument();
-    toggle.focus();
-    await user.keyboard('{Enter}');
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await user.click(heading);
     expect(input).toBeVisible();
     expect(input).toHaveValue('My pasted books');
-    await user.keyboard(' ');
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('button', { name: /^\+ Add books?$/ })).toBeVisible();
   });
 
   it('shows a button loader without adding cards until the complete AI batch is extracted', async () => {
@@ -726,7 +753,7 @@ describe('book list UI', () => {
     },
   );
 
-  it('preserves a bulk draft and selection when the AI availability check completes and the panel collapses', async () => {
+  it('preserves a bulk draft and selection when the AI availability check completes', async () => {
     let resolveAvailability!: (value: 'available') => void;
     vi.mocked(window.LanguageModel!.availability).mockReturnValue(new Promise((resolve) => { resolveAvailability = resolve; }));
     const user = userEvent.setup();
@@ -737,15 +764,12 @@ describe('book list UI', () => {
     expect(screen.getByRole('button', { name: 'Bulk insert' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: 'AI assisted' }));
     await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
-    await user.click(screen.getByRole('button', { name: 'Add books' }));
-    expect(screen.getByLabelText('Books to add')).not.toBeVisible();
-    await user.click(screen.getByRole('button', { name: 'Add books' }));
     expect(screen.getByLabelText('Books to add')).toHaveValue('Dune | Frank Herbert');
     await user.click(screen.getByRole('button', { name: '+ Add books' }));
     expect(screen.getByText('Added 1 book to your reading pile.')).toHaveAttribute('role', 'status');
   });
 
-  it('preserves independent drafts across mode changes and collapse, and clears mode-specific errors', async () => {
+  it('preserves independent drafts across mode changes and clears mode-specific errors', async () => {
     const user = userEvent.setup();
     render(<App />);
     await user.type(await screen.findByLabelText('Book title and author in natural language'), 'AI draft');
@@ -755,8 +779,6 @@ describe('book list UI', () => {
     await user.click(screen.getByRole('button', { name: 'AI assisted' }));
     expect(screen.getByLabelText('Book title and author in natural language')).toHaveValue('AI draft');
     await user.click(screen.getByRole('button', { name: 'Manual entry' }));
-    await user.click(screen.getByRole('button', { name: 'Add books' }));
-    await user.click(screen.getByRole('button', { name: 'Add books' }));
     expect(screen.getByLabelText('Book name')).toHaveValue('Structured draft');
     expect(screen.getByLabelText('Author (optional)')).toHaveValue('Draft author');
     await user.clear(screen.getByLabelText('Book name'));

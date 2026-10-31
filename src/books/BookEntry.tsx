@@ -26,7 +26,6 @@ export function BookEntry({ board, onChange, onNotice }: {
     : aiEnabled && aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
-  const [entryOpen, setEntryOpen] = useState(true);
   const [inputError, setInputError] = useState('');
   const downloadProgress = useSyncExternalStore(subscribeModelDownload, getModelDownloadProgress);
   const downloading = downloadProgress !== null;
@@ -107,17 +106,9 @@ export function BookEntry({ board, onChange, onNotice }: {
   }
 
   return (
-    <section className="entry-panel" aria-labelledby="entry-title" data-collapsed={!entryOpen}>
-      <h2 id="entry-title">
-        <button className="entry-toggle" type="button" aria-expanded={entryOpen}
-          aria-controls="entry-form" onClick={() => setEntryOpen((open) => !open)}>
-          Add books
-          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-            <path d={entryOpen ? 'm5 12 5-5 5 5' : 'm5 8 5 5 5-5'} />
-          </svg>
-        </button>
-      </h2>
-      <form id="entry-form" hidden={!entryOpen} onSubmit={(event) => {
+    <section className="entry-panel" aria-labelledby="entry-title">
+      <h2 id="entry-title">Add books</h2>
+      <form id="entry-form" onSubmit={(event) => {
         event.preventDefault();
         void addBook();
       }}>

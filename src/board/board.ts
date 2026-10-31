@@ -130,6 +130,11 @@ export function clearRankings(board: Board): Board {
   };
 }
 
+export function clearGallery(board: Board): Board {
+  const galleryIds = new Set(board.gallery);
+  return { ...board, books: board.books.filter((book) => !galleryIds.has(book.id)), gallery: [] };
+}
+
 export function removeBook(board: Board, bookId: string): Board {
   locationOf(board, bookId);
   return {

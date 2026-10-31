@@ -9,7 +9,7 @@ import { RankingBoard } from '../ranking/RankingBoard';
 import { useRankingDrag } from '../ranking/useRankingDrag';
 import { ExportBoard } from '../export/ExportBoard';
 import { CoverExportError, exportJpeg } from '../export/exportJpeg';
-import { GALLERY, clearRankings, moveBook, removeBook } from '../board/board';
+import { GALLERY, clearGallery, clearRankings, moveBook, removeBook } from '../board/board';
 import { useBoard } from './useBoard';
 import { useStoredPreference } from './useStoredPreference';
 
@@ -62,7 +62,9 @@ export function App() {
         <DndContext sensors={sensors} collisionDetection={collisionDetection}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
-          <Gallery board={board} onRemove={(id) => {
+          <Gallery board={board} onClear={() => {
+            if (change(clearGallery)) setNotice('All unranked books removed from your reading pile.');
+          }} onRemove={(id) => {
             if (change((current) => removeBook(current, id))) setNotice('Book removed.');
           }} />
           {actionError && <div className="error-banner" role="alert">{actionError}</div>}
@@ -77,7 +79,7 @@ export function App() {
                 <p className="ranking-progress">
                   <span>{rankedCount} of {board.books.length} books ranked</span>
                   <span aria-hidden="true">·</span>
-                  <button className="clear-rankings-button" type="button" disabled={rankedCount === 0}
+                  <button className="clear-books-button" type="button" disabled={rankedCount === 0}
                     onClick={() => {
                       if (change(clearRankings)) setNotice('All ranked books returned to your reading pile.');
                     }}>

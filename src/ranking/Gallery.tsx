@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { GALLERY } from '../board/board';
 import { BookZone, type BoardProps } from './BookZone';
 
-export function Gallery(props: BoardProps) {
+export function Gallery({ onClear, ...props }: BoardProps & { onClear: () => void }) {
   const sectionRef = useRef<HTMLElement>(null);
   const previousBookIds = useRef(new Set(props.board.books.map((book) => book.id)));
   const [stuck, setStuck] = useState(false);
@@ -36,6 +36,16 @@ export function Gallery(props: BoardProps) {
 
   return (
     <section ref={sectionRef} className="gallery-section" data-stuck={stuck} aria-label="Your books">
+      <div className="gallery-toolbar">
+        <button className="clear-books-button" type="button" disabled={props.board.gallery.length === 0}
+          onClick={onClear}>
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+          Clear all
+        </button>
+      </div>
       <div className="ranking-hint">
         <span>drag to rank</span>
         <svg viewBox="0 0 80 90" fill="none" aria-hidden="true">

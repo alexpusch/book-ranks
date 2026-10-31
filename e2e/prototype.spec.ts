@@ -619,20 +619,29 @@ for (const width of [1360, 390, 320]) {
     expect(initial.y).toBeGreaterThan(0);
     await expect(gallery).toHaveCSS('box-shadow', 'none');
     const entry = page.getByRole('region', { name: 'Add books', exact: true });
-    const toggle = entry.getByRole('button', { name: 'Add books', exact: true });
-    await toggle.click();
-    await expect(entry.locator('#entry-form')).toBeHidden();
+    const heading = entry.getByRole('heading', { name: 'Add books', exact: true });
+    await expect(entry.getByRole('button', { name: 'Add books', exact: true })).toHaveCount(0);
+    await expect(entry.locator('#entry-form')).toBeVisible();
     await expect(gallery).toBeInViewport();
-    const collapsedEntry = await entry.boundingBox();
-    const collapsedGallery = await gallery.boundingBox();
-    if (!collapsedEntry || !collapsedGallery) throw new Error('Collapsed entry and gallery are not visible.');
-    expect(collapsedGallery.y).toBe(collapsedEntry.y + collapsedEntry.height);
-    await toggle.click();
+    const entryBox = await entry.boundingBox();
+    if (!entryBox) throw new Error('Book entry is not visible.');
+    expect(initial.y).toBe(entryBox.y + entryBox.height);
+    const clearButton = gallery.getByRole('button', { name: 'Clear all', exact: true });
+    const rankClearButton = page.getByRole('region', { name: 'Rank the books' }).getByRole('button', { name: 'Clear all', exact: true });
+    const clearButtonBox = await clearButton.boundingBox();
+    const zoneBox = await zone.boundingBox();
+    if (!clearButtonBox || !zoneBox) throw new Error('Gallery and clear button are not visible.');
+    expect(zoneBox.y - (clearButtonBox.y + clearButtonBox.height)).toBe(8);
+    expect(clearButtonBox.x).toBe(zoneBox.x);
+    for (const property of ['font-size', 'color']) {
+      const expected = await rankClearButton.evaluate((element, property) => getComputedStyle(element).getPropertyValue(property), property);
+      await expect(clearButton).toHaveCSS(property, expected);
+    }
 
     await lowerTier.scrollIntoViewIfNeeded();
     await expect.poll(async () => (await gallery.boundingBox())?.y).toBe(0);
     await expect(gallery).not.toHaveCSS('box-shadow', 'none');
-    await expect(toggle).not.toBeInViewport();
+    await expect(heading).not.toBeInViewport();
     await expect(entry.locator('#entry-form')).not.toBeInViewport();
     const pinned = await gallery.boundingBox();
     const destination = await lowerTier.boundingBox();

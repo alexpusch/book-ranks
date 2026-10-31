@@ -182,24 +182,6 @@ main {
   font: 23px Georgia, serif;
 }
 
-.entry-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-}
-
-.entry-panel[data-collapsed="true"] {
-  gap: 0;
-}
-
 .entry-panel>form {
   min-width: 0;
 }
@@ -425,6 +407,11 @@ main {
   box-shadow: 0 6px 10px -6px #25332733;
 }
 
+.gallery-toolbar {
+  display: flex;
+  margin-bottom: 8px;
+}
+
 .ranking-hint {
   display: none;
   position: absolute;
@@ -485,7 +472,7 @@ main {
   gap: 6px;
 }
 
-.clear-rankings-button {
+.clear-books-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -493,6 +480,7 @@ main {
   border: 0;
   background: transparent;
   color: var(--danger);
+  font-size: 11px;
 }
 
 .section-heading>.eyebrow {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GALLERY, addTier, booksAt, clearRankings, createBoard, deleteTier, importBooks, locationOf,
+  GALLERY, addTier, booksAt, clearGallery, clearRankings, createBoard, deleteTier, importBooks, locationOf,
   moveBook, queueBook, removeBook, reorderTier, resolveQueuedBooks, updateBook, updateTier,
 } from './board';
 
@@ -101,6 +101,23 @@ describe('book import', () => {
 
 describe('board operations', () => {
   const populated = () => importBooks(createBoard(), 'One\nTwo\nThree');
+
+  it('clears only gallery books without changing ranked books, artwork, or tier settings', () => {
+    const original = populated();
+    const [one, two, three] = original.gallery;
+    original.books[1].coverSelection = { kind: 'placeholder' };
+    const board = moveBook(original, two, 'tier-S');
+    const next = clearGallery(board);
+    expect(next.gallery).toEqual([]);
+    expect(next.books).toEqual([board.books[1]]);
+    expect(next.books[0]).toBe(board.books[1]);
+    expect(next.tiers).toBe(board.tiers);
+    expect(board.gallery).toEqual([one, three]);
+    expect(board.books).toHaveLength(3);
+    expect(clearGallery(next)).toEqual(next);
+    expect(clearGallery(createBoard())).toEqual(createBoard());
+    expect(clearGallery(original).books).toEqual([]);
+  });
 
   it('clears every tier into the gallery in tier and book order without changing books or tier settings', () => {
     const original = populated();
