@@ -30,7 +30,8 @@ describe('book list UI', () => {
       window.history.replaceState(null, '', url);
       localStorage.setItem('shelf-life.entry-mode', 'ai');
       render(<App />);
-      expect(screen.queryByRole('group', { name: 'Book addition mode' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Bulk insert' })).toBeVisible();
+      expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Book title and author in natural language')).not.toBeInTheDocument();
       expect(screen.queryByRole('link', { name: 'About the Prompt API' })).not.toBeInTheDocument();
       expect(window.LanguageModel?.availability).not.toHaveBeenCalled();
@@ -60,11 +61,11 @@ describe('book list UI', () => {
     }
   });
 
-  it.each(['Manual entry', 'AI assisted'])('restores the explicit %s choice instead of the AI default', async (mode) => {
+  it.each(['Manual entry', 'AI assisted', 'Bulk insert'])('restores the explicit %s choice instead of the AI default', async (mode) => {
     const user = userEvent.setup();
     const app = render(<App />);
     await user.click(await screen.findByRole('button', { name: mode }));
-    expect(localStorage.getItem('shelf-life.entry-mode')).toBe(mode === 'Manual entry' ? 'structured' : 'ai');
+    expect(localStorage.getItem('shelf-life.entry-mode')).toBe(mode === 'Manual entry' ? 'structured' : mode === 'Bulk insert' ? 'bulk' : 'ai');
     app.unmount();
     vi.stubGlobal('LanguageModel', { availability: vi.fn().mockResolvedValue('downloadable') });
     render(<App />);
@@ -460,7 +461,7 @@ describe('book list UI', () => {
     render(<App />);
     expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', String(availability === 'available'));
     const modes = screen.getByRole('group', { name: 'Book addition mode' });
-    expect(within(modes).getAllByRole('button').map((button) => button.textContent)).toEqual(['Manual entry', 'AI assisted']);
+    expect(within(modes).getAllByRole('button').map((button) => button.textContent)).toEqual(['Manual entry', 'AI assisted', 'Bulk insert']);
     expect(screen.getByRole('button', { name: 'Manual entry' })).toHaveAttribute('aria-pressed', String(availability !== 'available'));
     expect(window.LanguageModel!.create).not.toHaveBeenCalled();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
@@ -556,14 +557,14 @@ describe('book list UI', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it.each(['missing', 'unavailable', 'rejected'] as const)('shows only the form without mode tabs when the Prompt API is %s', async (state) => {
+  it.each(['missing', 'unavailable', 'rejected'] as const)('keeps manual and bulk modes available when the Prompt API is %s', async (state) => {
     if (state === 'missing') vi.stubGlobal('LanguageModel', undefined);
     else if (state === 'unavailable') vi.mocked(window.LanguageModel!.availability).mockResolvedValue('unavailable');
     else vi.mocked(window.LanguageModel!.availability).mockRejectedValue(new Error('Availability check failed'));
     await act(async () => { render(<App />); });
     expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Manual entry' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Book addition mode' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manual entry' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Bulk insert' })).toBeEnabled();
     expect(screen.getByLabelText('Book name')).toBeVisible();
     expect(screen.queryByRole('link', { name: 'About the Prompt API' })).not.toBeInTheDocument();
     if (state === 'rejected') expect(screen.getByRole('alert')).toHaveTextContent('Could not check Chrome AI availability. Availability check failed');
@@ -575,7 +576,7 @@ describe('book list UI', () => {
     const user = userEvent.setup();
     render(<App />);
     expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Manual entry' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Manual entry' })).toBeVisible();
     await user.type(screen.getByLabelText('Book name'), 'Manual draft');
     await act(async () => { resolveAvailability('available'); });
     expect(screen.getByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'false');
@@ -611,6 +612,78 @@ describe('book list UI', () => {
     await user.keyboard('{Enter}');
     expect(screen.getByRole('article', { name: 'Another book by Unknown author' })).toBeInTheDocument();
     await waitFor(() => expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books).toHaveLength(3));
+  });
+
+  it('bulk inserts every line into the gallery without AI and persists the books and mode', async () => {
+    window.history.replaceState(null, '', '/');
+    vi.stubGlobal('LanguageModel', undefined);
+    const user = userEvent.setup();
+    const app = render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
+    const input = screen.getByLabelText('Books to add');
+    expect(input.tagName).toBe('TEXTAREA');
+    expect(input).toHaveAccessibleDescription(/book title \| author\(s\) name/);
+    expect(screen.getAllByRole('textbox')).toHaveLength(1);
+    fireEvent.change(input, { target: { value: '\n Dune | Frank   Herbert \r\nGood Omens | Terry Pratchett, Neil Gaiman\nPiranesi\nDune | Frank Herbert\n' } });
+    await user.click(screen.getByRole('button', { name: '+ Add books' }));
+    expect(screen.getAllByRole('article', { name: 'Dune by Frank Herbert' })).toHaveLength(2);
+    expect(screen.getByRole('article', { name: 'Good Omens by Terry Pratchett, Neil Gaiman' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Piranesi by Unknown author' })).toBeInTheDocument();
+    expect(input).toHaveValue('');
+    expect(screen.getByText('Added 4 books to your reading pile.')).toHaveAttribute('role', 'status');
+    await waitFor(() => {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+      expect(saved.books).toHaveLength(4);
+      expect(saved.gallery).toEqual(saved.books.map((book: { id: string }) => book.id));
+    });
+    await waitFor(() => expect(openLibraryClient.search).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Good Omens', author: 'Terry Pratchett, Neil Gaiman' }), expect.any(AbortSignal),
+    ));
+    app.unmount();
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Bulk insert' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByLabelText('Books to add')).toBeVisible();
+    expect(screen.getAllByRole('article')).toHaveLength(4);
+  });
+
+  it.each(['', ' \n ', 'Valid | Author\n | Author', 'Valid | Author\nBad | Author | Extra'])(
+    'rejects invalid bulk input atomically and preserves the draft (%j)', async (text) => {
+      vi.stubGlobal('LanguageModel', undefined);
+      const user = userEvent.setup();
+      render(<App />);
+      await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
+      const input = screen.getByLabelText('Books to add');
+      fireEvent.change(input, { target: { value: text } });
+      await user.click(screen.getByRole('button', { name: '+ Add books' }));
+      expect(screen.getByRole('alert')).toHaveTextContent(text.includes('Valid') ? 'Line 2:' : 'Enter at least one book title.');
+      expect(input).toHaveValue(text);
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(screen.queryByRole('article')).not.toBeInTheDocument();
+      expect(openLibraryClient.search).not.toHaveBeenCalled();
+      await user.click(screen.getByRole('button', { name: 'Manual entry' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
+      expect(screen.getByLabelText('Books to add')).toHaveValue(text);
+    },
+  );
+
+  it('preserves a bulk draft and selection when the AI availability check completes and the panel collapses', async () => {
+    let resolveAvailability!: (value: 'available') => void;
+    vi.mocked(window.LanguageModel!.availability).mockReturnValue(new Promise((resolve) => { resolveAvailability = resolve; }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
+    await user.type(screen.getByLabelText('Books to add'), 'Dune | Frank Herbert');
+    await act(async () => { resolveAvailability('available'); });
+    expect(screen.getByRole('button', { name: 'Bulk insert' })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: 'AI assisted' }));
+    await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
+    await user.click(screen.getByRole('button', { name: 'Add books' }));
+    expect(screen.getByLabelText('Books to add')).not.toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Add books' }));
+    expect(screen.getByLabelText('Books to add')).toHaveValue('Dune | Frank Herbert');
+    await user.click(screen.getByRole('button', { name: '+ Add books' }));
+    expect(screen.getByText('Added 1 book to your reading pile.')).toHaveAttribute('role', 'status');
   });
 
   it('preserves independent drafts across mode changes and collapse, and clears mode-specific errors', async () => {

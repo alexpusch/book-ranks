@@ -206,6 +206,7 @@ main {
 
 .entry-modes {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--control-line);
@@ -302,7 +303,21 @@ main {
   font-weight: 400;
 }
 
-.entry-field input {
+.bulk-entry {
+  display: grid;
+  gap: 12px;
+}
+
+.bulk-entry>.primary-button {
+  justify-self: start;
+}
+
+.entry-field textarea {
+  resize: vertical;
+}
+
+.entry-field input,
+.entry-field textarea {
   width: 100%;
   min-width: 0;
   border: 1px solid var(--input-line);
@@ -315,11 +330,13 @@ main {
   box-shadow: 0 1px 2px #25332708;
 }
 
-.entry-field input::placeholder {
+.entry-field input::placeholder,
+.entry-field textarea::placeholder {
   color: var(--placeholder);
 }
 
-.entry-field input[aria-invalid="true"] {
+.entry-field input[aria-invalid="true"],
+.entry-field textarea[aria-invalid="true"] {
   border-color: var(--error);
 }
 

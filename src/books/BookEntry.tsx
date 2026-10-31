@@ -11,12 +11,14 @@ export function BookEntry({ board, onChange, onNotice }: {
   board: Board; onChange: BoardChange; onNotice: (notice: string) => void;
 }) {
   const [input, setInput] = useState('');
-  const preference = useStoredPreference('shelf-life.entry-mode', ['ai', 'structured'], null);
+  const [bulkInput, setBulkInput] = useState('');
+  const preference = useStoredPreference('shelf-life.entry-mode', ['ai', 'structured', 'bulk'], null);
   const [selectedEntryMode, setEntryMode] = useState(preference.value);
   const aiEnabled = new URLSearchParams(window.location.search).get('ai') === 'true';
   const [aiAvailable, setAiAvailable] = useState(false);
   const [aiReady, setAiReady] = useState(false);
-  const entryMode = aiEnabled && aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
+  const entryMode = selectedEntryMode === 'bulk' ? 'bulk'
+    : aiEnabled && aiAvailable ? selectedEntryMode ?? (aiReady ? 'ai' : 'structured') : 'structured';
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [entryOpen, setEntryOpen] = useState(true);
@@ -46,22 +48,25 @@ export function BookEntry({ board, onChange, onNotice }: {
   function addBook() {
     setInputError('');
     try {
-      const next = entryMode === 'ai' ? queueBook(board, input) : importBooks(board, [{ title, author }]);
+      const next = entryMode === 'ai' ? queueBook(board, input)
+        : importBooks(board, entryMode === 'bulk' ? bulkInput : [{ title, author }]);
+      const addedCount = next.books.length - board.books.length;
       if (onChange(() => next)) {
         if (entryMode === 'ai') setInput('');
+        else if (entryMode === 'bulk') setBulkInput('');
         else {
           setTitle('');
           setAuthor('');
         }
 
-        onNotice('Added 1 book to your reading pile.');
+        onNotice(`Added ${addedCount} ${addedCount === 1 ? 'book' : 'books'} to your reading pile.`);
       }
     } catch (error) {
       setInputError(`Could not add book. ${errorMessage(error)}`);
     }
   }
 
-  function selectEntryMode(mode: 'ai' | 'structured') {
+  function selectEntryMode(mode: 'ai' | 'structured' | 'bulk') {
     setEntryMode(mode);
     preference.select(mode);
     setInputError('');
@@ -82,12 +87,14 @@ export function BookEntry({ board, onChange, onNotice }: {
         event.preventDefault();
         addBook();
       }}>
-        {aiEnabled && aiAvailable && <div className="entry-modes" role="group" aria-label="Book addition mode">
+        <div className="entry-modes" role="group" aria-label="Book addition mode">
           <button type="button" aria-pressed={entryMode === 'structured'}
             onClick={() => selectEntryMode('structured')}>Manual entry</button>
-          <button type="button" aria-pressed={entryMode === 'ai'}
-            onClick={() => selectEntryMode('ai')}>AI assisted</button>
-        </div>}
+          {aiEnabled && aiAvailable && <button type="button" aria-pressed={entryMode === 'ai'}
+            onClick={() => selectEntryMode('ai')}>AI assisted</button>}
+          <button type="button" aria-pressed={entryMode === 'bulk'}
+            onClick={() => selectEntryMode('bulk')}>Bulk insert</button>
+        </div>
         <p className="entry-mode-help" id="entry-mode-help">{entryMode === 'ai'
           ? <>Uses Chrome's built-in, on-device LLM to clean up your book details. {!aiReady && <span className="model-download-warning">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
@@ -96,7 +103,9 @@ export function BookEntry({ board, onChange, onNotice }: {
             </svg>
             This will require initial Gemini Nano download
           </span>}{!aiReady && '. '}<a href="https://developer.chrome.com/docs/ai/prompt-api" target="_blank" rel="noreferrer">About the Prompt API</a></>
-          : ''}</p>
+          : entryMode === 'bulk'
+            ? 'Add one book per line using book title | author(s) name. Authors are optional; blank lines are ignored.'
+            : ''}</p>
         {entryMode === 'ai' ? <div className="ai-entry-row"><label className="entry-field" htmlFor="book-input">
           <span>Book title and author in natural language</span>
           <input id="book-input" value={input} onChange={(event) => setInput(event.target.value)}
@@ -104,6 +113,16 @@ export function BookEntry({ board, onChange, onNotice }: {
             aria-invalid={!!inputError} aria-describedby={inputError ? 'input-error entry-mode-help' : 'input-help entry-mode-help'} />
         </label>
           <button className="primary-button" type="submit">+ Add book</button>
+        </div> : entryMode === 'bulk' ? <div className="bulk-entry">
+          <label className="entry-field" htmlFor="bulk-book-input">
+            <span>Books to add</span>
+            <textarea id="bulk-book-input" rows={5} value={bulkInput}
+              onChange={(event) => setBulkInput(event.target.value)}
+              placeholder={'Dune | Frank Herbert\nGood Omens | Terry Pratchett, Neil Gaiman'}
+              aria-invalid={!!inputError}
+              aria-describedby={inputError ? 'input-error entry-mode-help' : 'entry-mode-help'} />
+          </label>
+          <button className="primary-button" type="submit">+ Add books</button>
         </div> : <div className="structured-fields">
           <label className="entry-field" htmlFor="book-title"><span>Book name</span>
             <input id="book-title" value={title} onChange={(event) => { setTitle(event.target.value); setEntryMode('structured'); }}

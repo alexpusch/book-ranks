@@ -17,4 +17,6 @@ npm run dev
 
 Open the URL printed in the terminal (normally http://localhost:5173). No API keys, backend, or `.env` file are needed.
 
-AI-assisted entry is hidden by default. Add `?ai=true` to the URL (or `&ai=true` if it already has query parameters) to enable it. It requires desktop Chrome with the [Prompt API](https://developer.chrome.com/docs/ai/prompt-api) available. Manual entry works without it.
+Manual entry and Bulk insert are always available. For Bulk insert, paste one book per line as `book title | author(s) name`, then click **+ Add books**. Authors can be omitted; blank lines are ignored. Fix any reported invalid lines before adding the batch.
+
+AI-assisted entry is hidden by default. Add `?ai=true` to the URL (or `&ai=true` if it already has query parameters) to enable it. It requires desktop Chrome with the [Prompt API](https://developer.chrome.com/docs/ai/prompt-api) available. Manual entry and Bulk insert work without it.

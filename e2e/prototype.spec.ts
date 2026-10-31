@@ -62,13 +62,37 @@ test('AI entry stays hidden unless the URL opts in, regardless of saved preferen
   for (const url of ['/', '/?ai=false', '/?ai=True']) {
     await page.goto(url);
     await expect(page.getByLabel('Book name', { exact: true })).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Book addition mode' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Bulk insert', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Book title and author in natural language')).toHaveCount(0);
     expect(await page.evaluate(() => localStorage.getItem('shelf-life.entry-mode'))).toBe('ai');
   }
   await page.goto('/?source=share&ai=true');
   await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByLabel('Book title and author in natural language')).toBeVisible();
+});
+
+test('bulk insert works without AI, fits mobile, and restores the batch after reload', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'LanguageModel', { configurable: true, value: undefined });
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Bulk insert', exact: true }).click();
+  const input = page.getByLabel('Books to add', { exact: true });
+  await expect(input).toHaveAttribute('aria-describedby', 'entry-mode-help');
+  await input.fill('Dune | Frank Herbert\nGood Omens | Terry Pratchett, Neil Gaiman\nDune | Frank Herbert');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.getByRole('button', { name: '+ Add books', exact: true }).click();
+  const gallery = page.getByRole('region', { name: 'Your books', exact: true });
+  await expect(gallery.getByRole('article')).toHaveCount(3);
+  await expect(gallery.getByRole('article', { name: 'Dune by Frank Herbert' })).toHaveCount(2);
+  await expect(gallery.getByRole('article', { name: 'Good Omens by Terry Pratchett, Neil Gaiman' })).toHaveCount(1);
+  await expect(input).toHaveValue('');
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Bulk insert', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(input).toBeVisible();
+  await expect(gallery.getByRole('article')).toHaveCount(3);
 });
 
 test('compact entry modes support keyboard submission and responsive structured fields', async ({ page }, testInfo) => {
@@ -190,7 +214,7 @@ test('non-Chrome browsers default to structured entry and can add without a lang
     Object.defineProperty(window, 'LanguageModel', { configurable: true, value: undefined });
   });
   await page.goto('/?ai=true');
-  await expect(page.getByRole('button', { name: 'Manual entry', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Manual entry', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveCount(0);
   await page.getByLabel('Book name', { exact: true }).fill('A book without AI');
   await page.getByRole('button', { name: '+ Add book', exact: true }).click();
