@@ -7,7 +7,7 @@ import { readLocalCover } from './localCover';
 import { CoverGallery, CoverOption } from './CoverGallery';
 
 export function BookEditor({ book, state, onSave, onSelect, onClose }: {
-  book: Book; state?: LookupState; onSave: (title: string, author: string, retry: boolean) => string | null;
+  book: Book; state?: LookupState; onSave: (title: string, author: string) => string | null;
   onSelect: (selection: CoverSelection) => void; onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -49,7 +49,6 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
     previousBook.current = book;
   }, [book.title, book.author]);
   const backdropPress = useRef(false);
-  const busy = state?.outcome === 'queued' || state?.outcome === 'loading' || state?.outcome === 'extracting';
   useEffect(() => { const element = dialog.current!; element.showModal(); return () => element.close(); }, []);
   function outsidePanel(x: number, y: number) {
     const bounds = dialog.current!.getBoundingClientRect();
@@ -74,23 +73,20 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
       </svg>
     </button>
     <form className="book-editor-form" onSubmit={(event) => {
-      event.preventDefault(); setError(onSave(title, author, false));
+      event.preventDefault(); setError(onSave(title, author));
     }}>
       <input className="book-name-input" aria-label="Book name" placeholder="Book name" value={title}
         onChange={(event) => setTitle(event.target.value)} required />
       <input className="book-author-input" aria-label="Author" placeholder="Author name" value={author}
         onChange={(event) => setAuthor(event.target.value)} />
       {error && <p className="field-error" role="alert">{error}</p>}
-      <button className="primary-button" type="submit">Save changes</button>
+      <button className="primary-button" type="submit">Save</button>
     </form>
     <h3 className="cover-section-title">Choose cover</h3>
-    <button className="secondary-button" disabled={busy} onClick={() => setError(onSave(title, author, true))}>
-      Retry cover search</button>
-    <button className="secondary-button" disabled={!workId || editionBusy || editionWork?.nextCursor === null}
+    {workId && <button className="secondary-button" disabled={editionBusy || editionWork?.nextCursor === null}
       onClick={() => void loadEditions()}>
       {editionBusy ? 'Loading editions...' : editionError ? 'Retry edition search' : editionWork ? 'More editions and covers' : 'Find additional editions and covers'}
-    </button>
-    {!workId && <p>Match a book before searching its editions.</p>}
+    </button>}
     {editionBusy && <p role="status">Looking up editions...</p>}
     {editionError && <p role="alert">{editionError}</p>}
     {editionWork?.nextCursor === null && <p>All available editions loaded.</p>}
@@ -98,7 +94,7 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
       ? <p role="status">{state.outcome === 'queued' ? 'Waiting for cover search...' : 'Looking up covers...'}</p> : <>
       {state.warning && <p role="alert">{state.warning}</p>}
       {state.outcome === 'error' && <p role="alert">{state.error}</p>}
-      {state.outcome === 'not-found' && <p>No matching works found.</p>}
+      {state.outcome === 'not-found' && <p>No matching works found</p>}
       {state.outcome === 'needs-review' && <p>Review the works and editions before choosing artwork.</p>}
     </>)}
     <div className="cover-options" role="group" aria-label="Cover gallery">

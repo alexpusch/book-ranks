@@ -74,7 +74,7 @@ test('AI-normalized titles and authors are saved and sent to Open Library lookup
   await expect(page.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeVisible();
 });
 
-test('serial cover searches show waiting and spinning states and the editor retries with changed fields', async ({ page }) => {
+test('serial cover searches show waiting and spinning states and saving changed fields searches again', async ({ page }) => {
   const inputs: { title: string; author: string }[] = [];
   const release = new Map<string, () => void>();
   await page.route('https://openlibrary.org/search.json?**', async (route) => {
@@ -113,12 +113,14 @@ test('serial cover searches show waiting and spinning states and the editor retr
   await expect(editor).toBeVisible();
   await editor.getByLabel('Book name').fill('Corrected');
   await editor.getByLabel('Author', { exact: true }).fill('Correct author');
-  await editor.getByRole('button', { name: 'Retry cover search' }).click();
-  await expect(editor.getByRole('button', { name: 'Retry cover search' })).toBeDisabled();
+  await expect(editor.getByRole('button', { name: 'Retry cover search' })).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Save', exact: true }).click();
   await expect.poll(() => inputs.at(-1)).toEqual({ title: 'Corrected', author: 'Correct author' });
   expect(inputs).toHaveLength(3);
   release.get('Corrected')!();
-  await expect(editor.getByText('No matching works found.', { exact: true })).toBeVisible();
+  await expect(editor.getByText('No matching works found', { exact: true })).toBeVisible();
+  await expect(editor.getByText('Match a book before searching its editions.', { exact: true })).toHaveCount(0);
+  await expect(editor.getByRole('button', { name: 'Find additional editions and covers' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(editor).toHaveCount(0);
   await expect(page.getByRole('article', { name: 'Corrected by Correct author', exact: true })).toBeVisible();

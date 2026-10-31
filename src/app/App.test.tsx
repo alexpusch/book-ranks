@@ -365,7 +365,7 @@ describe('book list UI', () => {
     const editor = screen.getByRole('dialog');
     await user.clear(within(editor).getByLabelText('Book name'));
     await user.type(within(editor).getByLabelText('Book name'), 'Manual correction');
-    await user.click(within(editor).getByRole('button', { name: 'Save changes' }));
+    await user.click(within(editor).getByRole('button', { name: 'Save' }));
     await user.click(screen.getByRole('button', { name: 'Close book editor' }));
     await act(async () => resolvePrompts[1](JSON.stringify({ books: [{ title: 'Stale result', author: '' }] })));
     expect(screen.getByRole('article', { name: 'Manual correction by Unknown author' })).toBeInTheDocument();

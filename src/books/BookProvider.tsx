@@ -21,7 +21,7 @@ export function BookProvider({ board, onChange, children }: {
   return <BookContext.Provider value={{ states: resolution.states, choose: setSelectedId, retry: resolution.retry }}>
     {children}
     {selected && <BookEditor key={selected.id} book={selected} state={resolution.states[selected.id]}
-      onSave={(title, author, retry) => resolution.saveBook(selected.id, title, author, retry)}
+      onSave={(title, author) => resolution.saveBook(selected.id, title, author, false)}
       onClose={() => setSelectedId(null)}
       onSelect={(selection) => { resolution.selectCover(selected, selection); setSelectedId(null); }} />}
   </BookContext.Provider>;

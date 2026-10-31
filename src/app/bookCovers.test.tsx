@@ -320,7 +320,7 @@ it('ignores a pending old identity after editing and retries using the latest fi
   render(<App />);
   const dialog = await edit();
   fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Renamed' } });
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
   await act(async () => resolve([work]));
   await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
   expect(search.mock.calls[1][0].title).toBe('Renamed');
@@ -328,7 +328,7 @@ it('ignores a pending old identity after editing and retries using the latest fi
   expect(saved().books[0].coverSelection).toBeUndefined();
 });
 
-it('preserves manually saved artwork, allows duplicate edits, and retries with unsaved fields', async () => {
+it('preserves manually saved artwork and allows duplicate edits when saving', async () => {
   const board = seed(selection);
   const other = importBooks(board, 'Other | Author');
   other.books[1].coverSelection = { kind: 'placeholder' };
@@ -337,17 +337,30 @@ it('preserves manually saved artwork, allows duplicate edits, and retries with u
   const dialog = await edit();
   fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Other' } });
   fireEvent.change(within(dialog).getByLabelText('Author'), { target: { value: 'Author' } });
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
   expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   expect(saved().books[0]).toMatchObject({ title: 'Other', author: 'Author', coverSelection: selection });
   expect(saved().books[1]).toEqual(other.books[1]);
   fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'New name' } });
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
   expect(saved().books[0]).toMatchObject({ title: 'New name', coverSelection: selection });
   fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Correct title' } });
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Retry cover search' }));
-  await waitFor(() => expect(search).toHaveBeenCalledOnce());
-  expect(search.mock.calls[0][0]).toMatchObject({ title: 'Correct title', author: 'Author' });
-  expect(saved().books[0].coverSelection).toBeUndefined();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  expect(search).not.toHaveBeenCalled();
+  expect(saved().books[0]).toMatchObject({ title: 'Correct title', author: 'Author', coverSelection: selection });
   expect(saved().tiers).toEqual(board.tiers);
+});
+
+it('shows only the no-match lookup message without retry or edition search controls', async () => {
+  seed();
+  render(<App />);
+  await screen.findByText('No match', { exact: true });
+  const dialog = await edit();
+  expect(within(dialog).getByText('No matching works found', { exact: true })).toBeInTheDocument();
+  expect(within(dialog).queryByText('Match a book before searching its editions.')).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Retry cover search' })).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Find additional editions and covers' })).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Upload photo' })).toBeEnabled();
+  expect(editions).not.toHaveBeenCalled();
 });
