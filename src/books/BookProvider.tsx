@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import type { Board, BoardChange } from '../board/board';
+import type { Board, BoardChange, BookInput } from '../board/board';
 import type { LookupState } from '../bookResolution/lookupState';
 import { useBookResolution } from '../bookResolution/useBookResolution';
 import { BookEditor } from './BookEditor';
@@ -10,8 +10,10 @@ interface BookContextValue {
   choose: (id: string) => void;
   review: (id: string) => void;
   retry: (id: string) => void;
+  addAiBooks: (entries: BookInput[]) => boolean;
 }
-const BookContext = createContext<BookContextValue>({ states: {}, choose: () => undefined, review: () => undefined, retry: () => undefined });
+const BookContext = createContext<BookContextValue>({ states: {}, choose: () => undefined, review: () => undefined, retry: () => undefined,
+  addAiBooks: () => { throw new Error('Book entry is not ready. Please try again.'); } });
 export const useBooks = () => useContext(BookContext);
 
 export function BookProvider({ board, onChange, children }: {
@@ -23,7 +25,8 @@ export function BookProvider({ board, onChange, children }: {
   const selected = board.books.find((book) => book.id === selectedId);
   const reviewed = board.books.find((book) => book.id === reviewId);
   const reviewState = reviewed && resolution.states[reviewed.id];
-  return <BookContext.Provider value={{ states: resolution.states, choose: setSelectedId, review: setReviewId, retry: resolution.retry }}>
+  return <BookContext.Provider value={{ states: resolution.states, choose: setSelectedId, review: setReviewId,
+    retry: resolution.retry, addAiBooks: resolution.addAiBooks }}>
     {children}
     {reviewed && <BookReview key={reviewed.id} book={reviewed}
       works={reviewState && 'works' in reviewState ? reviewState.works : []}

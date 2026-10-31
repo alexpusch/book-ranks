@@ -76,6 +76,22 @@ export function queueBook(board: Board, input: string): Board {
     ? { ...book, title: input, pendingInput: input } : book) };
 }
 
+export function resolveQueuedBooks(board: Board, id: string, entries: BookInput[]): Board {
+  if (!board.books.some((book) => book.id === id && book.pendingInput !== undefined)) {
+    throw new Error('Pending book not found.');
+  }
+  if (!entries.length) throw new Error('No books could be identified.');
+  let next = updateBook(board, id, entries[0]);
+  if (entries.length === 1) return next;
+  const existingCount = next.books.length;
+  next = importBooks(next, entries.slice(1));
+  const addedIds = next.books.slice(existingCount).map((book) => book.id);
+  const gallery = [...board.gallery];
+  const index = gallery.indexOf(id);
+  gallery.splice(index < 0 ? gallery.length : index + 1, 0, ...addedIds);
+  return { ...next, gallery };
+}
+
 export function locationOf(board: Board, bookId: string): string {
   if (board.gallery.includes(bookId)) return GALLERY;
   const tier = board.tiers.find((item) => item.bookIds.includes(bookId));
@@ -104,6 +120,14 @@ export function moveBook(board: Board, bookId: string, destination: string, inde
   }
   target.splice(insertion, 0, bookId);
   return result;
+}
+
+export function clearRankings(board: Board): Board {
+  return {
+    ...board,
+    gallery: [...board.gallery, ...board.tiers.flatMap((tier) => tier.bookIds)],
+    tiers: board.tiers.map((tier) => ({ ...tier, bookIds: [] })),
+  };
 }
 
 export function removeBook(board: Board, bookId: string): Board {

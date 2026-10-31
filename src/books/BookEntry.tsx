@@ -1,7 +1,9 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { importBooks, queueBook, type Board, type BoardChange } from '../board/board';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { importBooks, type Board, type BoardChange } from '../board/board';
 import { getModelDownloadProgress, subscribeModelDownload } from '../integrations/chromeAi/prompt';
 import { useStoredPreference } from '../app/useStoredPreference';
+import { extractBooks } from '../bookResolution/extraction';
+import { useBooks } from './BookProvider';
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.';
@@ -12,6 +14,9 @@ export function BookEntry({ board, onChange, onNotice }: {
 }) {
   const [input, setInput] = useState('');
   const [bulkInput, setBulkInput] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const extraction = useRef<AbortController | null>(null);
+  const { addAiBooks } = useBooks();
   const preference = useStoredPreference('shelf-life.entry-mode', ['ai', 'structured', 'bulk'], null);
   const [selectedEntryMode, setEntryMode] = useState(preference.value);
   const aiEnabled = new URLSearchParams(window.location.search).get('ai') === 'true';
@@ -25,6 +30,11 @@ export function BookEntry({ board, onChange, onNotice }: {
   const [inputError, setInputError] = useState('');
   const downloadProgress = useSyncExternalStore(subscribeModelDownload, getModelDownloadProgress);
   const downloading = downloadProgress !== null;
+
+  useEffect(() => () => {
+    extraction.current?.abort();
+    extraction.current = null;
+  }, []);
 
   useEffect(() => {
     if (!aiEnabled || downloading) return;
@@ -45,15 +55,39 @@ export function BookEntry({ board, onChange, onNotice }: {
     return () => { cancelled = true; };
   }, [aiEnabled, downloading]);
 
-  function addBook() {
+  async function addBook() {
+    if (entryMode === 'ai') {
+      if (extraction.current) return;
+      setInputError('');
+      if (!input.trim()) {
+        setInputError('Enter at least one book title.');
+        return;
+      }
+      const controller = new AbortController();
+      extraction.current = controller;
+      setExtracting(true);
+      try {
+        const entries = await extractBooks(input, () => {}, controller.signal);
+        controller.signal.throwIfAborted();
+        if (!addAiBooks(entries)) throw new Error('Could not add the extracted books. Please try again.');
+        setInput('');
+        onNotice(`Added ${entries.length} ${entries.length === 1 ? 'book' : 'books'} to your reading pile.`);
+      } catch (error) {
+        if (!controller.signal.aborted) setInputError(`Could not add books. ${errorMessage(error)}`);
+      } finally {
+        if (extraction.current === controller) {
+          extraction.current = null;
+          setExtracting(false);
+        }
+      }
+      return;
+    }
     setInputError('');
     try {
-      const next = entryMode === 'ai' ? queueBook(board, input)
-        : importBooks(board, entryMode === 'bulk' ? bulkInput : [{ title, author }]);
+      const next = importBooks(board, entryMode === 'bulk' ? bulkInput : [{ title, author }]);
       const addedCount = next.books.length - board.books.length;
       if (onChange(() => next)) {
-        if (entryMode === 'ai') setInput('');
-        else if (entryMode === 'bulk') setBulkInput('');
+        if (entryMode === 'bulk') setBulkInput('');
         else {
           setTitle('');
           setAuthor('');
@@ -85,7 +119,7 @@ export function BookEntry({ board, onChange, onNotice }: {
       </h2>
       <form id="entry-form" hidden={!entryOpen} onSubmit={(event) => {
         event.preventDefault();
-        addBook();
+        void addBook();
       }}>
         <div className="entry-modes" role="group" aria-label="Book addition mode">
           <button type="button" aria-pressed={entryMode === 'structured'}
@@ -96,7 +130,7 @@ export function BookEntry({ board, onChange, onNotice }: {
             onClick={() => selectEntryMode('bulk')}>Bulk insert</button>
         </div>
         <p className="entry-mode-help" id="entry-mode-help">{entryMode === 'ai'
-          ? <>Uses Chrome's built-in, on-device LLM to clean up your book details. {!aiReady && <span className="model-download-warning">
+          ? <>Paste a list or library page, including titles and authors. Chrome's built-in, on-device LLM extracts all books and adds them together. {!aiReady && <span className="model-download-warning">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d="M12 3 2 21h20L12 3Z" strokeLinejoin="round" />
               <path d="M12 9v5m0 3v1" />
@@ -106,13 +140,20 @@ export function BookEntry({ board, onChange, onNotice }: {
           : entryMode === 'bulk'
             ? 'Add one book per line using book title | author(s) name. Authors are optional; blank lines are ignored.'
             : ''}</p>
-        {entryMode === 'ai' ? <div className="ai-entry-row"><label className="entry-field" htmlFor="book-input">
+        {entryMode === 'ai' ? <div className="bulk-entry"><label className="entry-field" htmlFor="book-input">
           <span>Book title and author in natural language</span>
-          <input id="book-input" value={input} onChange={(event) => setInput(event.target.value)}
-            placeholder="The Lord of the Rings by J. R. R. Tolkien"
+          <textarea id="book-input" rows={6} value={input} disabled={extracting} onChange={(event) => setInput(event.target.value)}
+            placeholder={'Paste your library or book list here, for example:\nDune by Frank Herbert\nPiranesi by Susanna Clarke'}
             aria-invalid={!!inputError} aria-describedby={inputError ? 'input-error entry-mode-help' : 'input-help entry-mode-help'} />
         </label>
-          <button className="primary-button" type="submit">+ Add book</button>
+          <button className="primary-button" type="submit" disabled={extracting} aria-busy={extracting}>
+            {extracting && <svg className="entry-spinner" viewBox="0 0 24 24" width="16" height="16"
+              fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" opacity=".3" />
+              <path d="M12 3a9 9 0 0 1 9 9" />
+            </svg>}
+            + Add books
+          </button>
         </div> : entryMode === 'bulk' ? <div className="bulk-entry">
           <label className="entry-field" htmlFor="bulk-book-input">
             <span>Books to add</span>

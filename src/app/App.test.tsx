@@ -5,7 +5,7 @@ import { App } from './App';
 import { exportJpeg } from '../export/exportJpeg';
 import { STORAGE_KEY } from '../board/storage';
 import type { BookLanguageModel } from '../integrations/chromeAi/prompt';
-import { createBoard, queueBook } from '../board/board';
+import { createBoard, importBooks, moveBook, queueBook } from '../board/board';
 import { openLibraryClient } from '../integrations/openLibrary/client';
 
 vi.mock('../export/exportJpeg', async (importOriginal) => ({ ...await importOriginal<typeof import('../export/exportJpeg')>(), exportJpeg: vi.fn() }));
@@ -24,6 +24,44 @@ beforeEach(() => {
 });
 
 describe('book list UI', () => {
+  it('clears all ranks into the gallery and restores the cleared board on reload', async () => {
+    let board = importBooks(createBoard(), 'One\nTwo\nThree\nFour');
+    board.books.forEach((book) => { book.coverSelection = { kind: 'placeholder' }; });
+    const [one, two, three, four] = board.gallery;
+    board = moveBook(board, two, 'tier-S');
+    board = moveBook(board, one, 'tier-S');
+    board = moveBook(board, three, 'tier-E');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
+    const app = render(<App />);
+    const button = screen.getByRole('button', { name: 'Clear all' });
+    expect(button).toBeEnabled();
+    expect(button.parentElement).toHaveTextContent('3 of 4 books ranked');
+    expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+
+    await userEvent.setup().click(button);
+
+    expect(screen.getByText('0 of 4 books ranked')).toBeVisible();
+    expect(button).toBeDisabled();
+    expect(within(screen.getByRole('region', { name: 'Your books' }))
+      .getAllByRole('article').map((card) => card.getAttribute('data-book-id'))).toEqual([four, two, one, three]);
+    for (const tier of board.tiers) {
+      expect(within(screen.getByRole('region', { name: `Tier ${tier.name}` })).queryByRole('article')).not.toBeInTheDocument();
+    }
+    expect(screen.getByText('All ranked books returned to your reading pile.')).toHaveAttribute('role', 'status');
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
+      ...board, gallery: [four, two, one, three], tiers: board.tiers.map((tier) => ({ ...tier, bookIds: [] })),
+    });
+    app.unmount();
+    render(<App />);
+    expect(screen.getByText('0 of 4 books ranked')).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Your books' })).getAllByRole('article')).toHaveLength(4);
+  });
+
+  it('disables clearing when there are no ranked books', () => {
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Clear all' })).toBeDisabled();
+  });
+
   it.each(['/', '/?ai=false', '/?ai=', '/?ai=True', '/?other=true', '/?other=ai%3Dtrue'])(
     'hides AI entry at %s even with a saved AI preference and an available model',
     async (url) => {
@@ -36,7 +74,7 @@ describe('book list UI', () => {
       expect(screen.queryByRole('link', { name: 'About the Prompt API' })).not.toBeInTheDocument();
       expect(window.LanguageModel?.availability).not.toHaveBeenCalled();
       await userEvent.setup().type(screen.getByLabelText('Book name'), 'Manual book');
-      await userEvent.setup().click(screen.getByRole('button', { name: '+ Add book' }));
+      await userEvent.setup().click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
       expect(await screen.findByRole('article', { name: 'Manual book by Unknown author' })).toBeInTheDocument();
       expect(localStorage.getItem('shelf-life.entry-mode')).toBe('ai');
     },
@@ -183,7 +221,7 @@ describe('book list UI', () => {
     render(<App />);
     await user.type(screen.getByLabelText('Book name'), 'Hyperion');
     await user.type(screen.getByLabelText('Author (optional)'), 'Dan');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(await screen.findByRole('article', { name: 'Hyperion by Dan Simmons' })).toBeInTheDocument();
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books[0]).toMatchObject({
@@ -206,7 +244,7 @@ describe('book list UI', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Manual entry' }));
     await user.type(screen.getByLabelText('Book name', { exact: true }), 'Dune');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(within(gallery).queryByText('your books', { exact: true })).not.toBeInTheDocument();
     expect(within(gallery).getByText('drag to rank', { exact: true })).toBeVisible();
     await user.click(within(gallery).getByRole('button', { name: 'Remove Dune' }));
@@ -256,7 +294,7 @@ describe('book list UI', () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(input).not.toBeVisible();
-    expect(screen.queryByRole('button', { name: '+ Add book' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^\+ Add books?$/ })).not.toBeInTheDocument();
     toggle.focus();
     await user.keyboard('{Enter}');
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -266,7 +304,7 @@ describe('book list UI', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('immediately queues exact-input cards with Chrome spinners while allowing more submissions', async () => {
+  it('shows a button loader without adding cards until the complete AI batch is extracted', async () => {
     const resolvePrompts: ((value: string) => void)[] = [];
     const prompt = vi.fn(() => new Promise<string>((resolve) => { resolvePrompts.push(resolve); }));
     const model: BookLanguageModel = {
@@ -281,55 +319,56 @@ describe('book list UI', () => {
     const user = userEvent.setup();
     render(<App />);
     const input = await screen.findByLabelText('Book title and author in natural language');
-    const raw = '  The Spear Cuts Through Water: A Novel by Simon Jimenez  ';
-    await user.type(input, raw);
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
-    const pending = screen.getByRole('article', { name: raw.trim() });
-    expect(pending.querySelector('.book-title')?.textContent).toBe(raw);
-    expect(pending.querySelector('.book-author')).toBeNull();
-    expect(pending.querySelector('.chrome-spinner')).toBeInTheDocument();
-    expect(input).toBeEnabled();
-    expect(input).toHaveValue('');
-    expect(screen.getByRole('button', { name: '+ Add book' })).toBeEnabled();
+    const raw = 'Long library text\n'.repeat(800);
+    fireEvent.change(input, { target: { value: raw } });
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
+    expect(screen.getAllByRole('article')).toHaveLength(1);
+    const button = screen.getByRole('button', { name: '+ Add books' });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    expect(button.querySelector('.entry-spinner')).toBeInTheDocument();
+    expect(input).toHaveValue(raw);
+    expect(input).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Manual entry' })).toBeEnabled();
-    await user.type(input, 'Another book');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
-    expect(screen.getByRole('article', { name: 'Another book' }).querySelector('.chrome-spinner')).toBeInTheDocument();
-    expect(screen.getAllByRole('article')).toHaveLength(3);
     await waitFor(() => expect(prompt).toHaveBeenCalledOnce());
-    expect(screen.queryByText(/Preparing Chrome AI|Checking Chrome AI|Extracting and normalizing|Adding book\.\.\./)).not.toBeInTheDocument();
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books.filter((book: { pendingInput?: string }) => book.pendingInput)).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: 'Remove Existing' }));
     await act(async () => resolvePrompts[0](JSON.stringify({
       books: [{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }],
     })));
-    expect(screen.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeInTheDocument();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
     await act(async () => resolvePrompts[1](JSON.stringify({ books: [{ title: 'Another book', author: '' }] })));
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    await waitFor(() => expect(prompt).toHaveBeenCalledTimes(3));
+    await act(async () => resolvePrompts[2](JSON.stringify({ books: [{ title: 'Last book', author: '' }] })));
+    expect(screen.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeInTheDocument();
     expect(screen.getByRole('article', { name: 'Another book by Unknown author' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Last book by Unknown author' })).toBeInTheDocument();
     expect(screen.queryByText('Existing')).not.toBeInTheDocument();
     expect(input).toHaveValue('');
     await waitFor(() => {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-      expect(saved.books).toHaveLength(2);
+      expect(saved.books).toHaveLength(3);
       expect(saved.books.every((book: { pendingInput?: string }) => book.pendingInput === undefined)).toBe(true);
     });
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute('aria-busy', 'false');
+    expect(button.querySelector('.entry-spinner')).not.toBeInTheDocument();
   });
 
-  it('keeps failed input on its card and allows retry without blocking new submissions', async () => {
+  it('keeps failed AI input in the form and allows retry without adding a card', async () => {
     const user = userEvent.setup();
     render(<App />);
     const input = await screen.findByLabelText('Book title and author in natural language');
     vi.stubGlobal('LanguageModel', undefined);
     await user.type(input, 'Some unstructured book text');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(screen.getByRole('alert')).toHaveTextContent('Chrome built-in AI is not available');
-    expect(input).toHaveValue('');
+    expect(input).toHaveValue('Some unstructured book text');
     expect(input).toBeEnabled();
-    expect(screen.getByRole('button', { name: '+ Add book' })).toBeEnabled();
-    const card = screen.getByRole('article', { name: 'Some unstructured book text' });
-    expect(card.querySelector('.book-title')?.textContent).toBe('Some unstructured book text');
-    expect(card.querySelector('.chrome-spinner')).toBeNull();
+    expect(screen.getByRole('button', { name: /^\+ Add books?$/ })).toBeEnabled();
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ Add books' }).querySelector('.entry-spinner')).not.toBeInTheDocument();
     vi.stubGlobal('LanguageModel', {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({
@@ -337,9 +376,32 @@ describe('book list UI', () => {
         destroy: vi.fn(),
       }),
     });
-    await user.click(within(card).getByRole('button', { name: 'Retry' }));
+    await user.click(screen.getByRole('button', { name: '+ Add books' }));
     expect(await screen.findByRole('article', { name: 'A resolved book by Author' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(input).toHaveValue('');
+  });
+
+  it('cancels form extraction when saved-data recovery resets the list', async () => {
+    let finish!: (response: string) => void;
+    const prompt = vi.fn(() => new Promise<string>((resolve) => { finish = resolve; }));
+    vi.stubGlobal('LanguageModel', {
+      availability: vi.fn().mockResolvedValue('available'),
+      create: vi.fn().mockResolvedValue({ prompt, destroy: vi.fn() }),
+    });
+    localStorage.setItem(STORAGE_KEY, 'invalid');
+    const user = userEvent.setup();
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText('Book title and author in natural language'), {
+      target: { value: 'Old library text' },
+    });
+    await user.click(screen.getByRole('button', { name: '+ Add books' }));
+    await waitFor(() => expect(prompt).toHaveBeenCalledOnce());
+    await user.click(screen.getByRole('button', { name: 'Reset saved data and current list' }));
+    await act(async () => finish('{"books":[{"title":"Stale book","author":""}]}'));
+    expect(screen.queryByRole('article')).not.toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books).toHaveLength(0);
+    expect(screen.getByRole('button', { name: '+ Add books' })).toBeEnabled();
   });
 
   it('skips removed pending entries and ignores late extraction results without blocking the remaining queue', async () => {
@@ -349,12 +411,11 @@ describe('book list UI', () => {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({ prompt, destroy: vi.fn() }),
     });
+    let board = createBoard();
+    for (const text of ['Active book', 'Queued book', 'Remaining book']) board = queueBook(board, text);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
     const user = userEvent.setup();
     render(<App />);
-    for (const text of ['Active book', 'Queued book', 'Remaining book']) {
-      await user.type(await screen.findByLabelText('Book title and author in natural language'), text);
-      await user.click(screen.getByRole('button', { name: '+ Add book' }));
-    }
     await waitFor(() => expect(prompt).toHaveBeenCalledOnce());
     await user.click(screen.getByRole('button', { name: 'Remove Queued book' }));
     await user.click(screen.getByRole('button', { name: 'Remove Active book' }));
@@ -374,10 +435,9 @@ describe('book list UI', () => {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({ prompt, destroy: vi.fn() }),
     });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queueBook(queueBook(createBoard(), 'Raw book'), 'Second raw book')));
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Raw book');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
     await waitFor(() => expect(prompt).toHaveBeenCalledOnce());
     await user.click(screen.getByRole('button', { name: 'Edit Raw book' }));
     await user.click(screen.getByRole('button', { name: 'Select placeholder cover' }));
@@ -386,8 +446,6 @@ describe('book list UI', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books[0].coverSelection).toEqual({ kind: 'placeholder' });
     expect(openLibraryClient.search).not.toHaveBeenCalled();
 
-    await user.type(screen.getByLabelText('Book title and author in natural language'), 'Second raw book');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
     await user.click(screen.getByRole('button', { name: 'Edit Second raw book' }));
     const editor = screen.getByRole('dialog');
@@ -417,7 +475,7 @@ describe('book list UI', () => {
     expect(screen.getByRole('main').firstElementChild).toHaveClass('entry-panel');
     for (const book of ['Dune | Frank Herbert', 'Piranesi']) {
       await user.type(await screen.findByLabelText('Book title and author in natural language'), book);
-      await user.click(screen.getByRole('button', { name: '+ Add book' }));
+      await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     }
     expect(screen.getByText(/0 of 2 books ranked/)).toBeInTheDocument();
     const gallery = screen.getByRole('region', { name: 'Your books' });
@@ -433,7 +491,7 @@ describe('book list UI', () => {
       expect(card).not.toHaveTextContent(/\d+\s*\/\s*\d+/);
     }
     await user.type(screen.getByLabelText('Book title and author in natural language'), 'Dune | Frank Herbert');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     await waitFor(() => expect(within(gallery).getAllByRole('button', { name: 'Remove Dune' })).toHaveLength(2));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(within(gallery).getAllByRole('article')).toHaveLength(3);
@@ -452,7 +510,7 @@ describe('book list UI', () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(userAgent);
     render(<App />);
     expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Book title and author in natural language').tagName).toBe('INPUT');
+    expect(screen.getByLabelText('Book title and author in natural language').tagName).toBe('TEXTAREA');
     expect(screen.getByRole('link', { name: 'About the Prompt API' })).toHaveAttribute('href', 'https://developer.chrome.com/docs/ai/prompt-api');
   });
 
@@ -502,12 +560,12 @@ describe('book list UI', () => {
     await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
     await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     await waitFor(() => expect(model.create).toHaveBeenCalledOnce());
     if (availability !== 'available') {
       const progress = screen.getByRole('progressbar', { name: /Downloading Chrome AI model/ });
       expect(progress).toHaveAttribute('value', '0');
-      expect(progress.parentElement?.previousElementSibling).toHaveClass('ai-entry-row');
+      expect(progress.parentElement?.previousElementSibling).toHaveClass('bulk-entry');
     }
     act(() => reportProgress({ loaded: 0.42 }));
     if (availability === 'available') expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
@@ -515,8 +573,8 @@ describe('book list UI', () => {
       expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0.42');
       expect(screen.getByText('42%')).toBeVisible();
     }
-    expect(screen.getByLabelText('Book title and author in natural language')).toBeEnabled();
-    expect(screen.getByRole('button', { name: '+ Add book' })).toBeEnabled();
+    expect(screen.getByLabelText('Book title and author in natural language')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^\+ Add books?$/ })).toBeDisabled();
     vi.mocked(model.availability).mockResolvedValue('available');
     await act(async () => finishCreation());
     expect(prompt).toHaveBeenCalledOnce();
@@ -528,12 +586,12 @@ describe('book list UI', () => {
     expect(await screen.findByRole('article', { name: 'Dune by Unknown author' })).toBeInTheDocument();
 
     await user.type(screen.getByLabelText('Book title and author in natural language'), 'Piranesi');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(await screen.findByRole('article', { name: 'Piranesi by Unknown author' })).toBeInTheDocument();
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it.each(['failure', 'cancellation'] as const)('clears download progress on %s and keeps errors on the card', async (outcome) => {
+  it.each(['failure', 'cancellation'] as const)('clears download progress on %s without adding a card', async (outcome) => {
     const model = window.LanguageModel!;
     vi.mocked(model.availability).mockResolvedValue('downloadable');
     let failDownload!: () => void;
@@ -542,16 +600,17 @@ describe('book list UI', () => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     }));
     const user = userEvent.setup();
-    render(<App />);
+    const app = render(<App />);
     await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
     await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(await screen.findByRole('progressbar')).toBeVisible();
     if (outcome === 'failure') {
       await act(async () => failDownload());
       expect(await screen.findByRole('alert')).toHaveTextContent('Model download failed');
     } else {
-      await user.click(screen.getByRole('button', { name: 'Remove Dune' }));
+      app.unmount();
+      expect(vi.mocked(model.create).mock.calls[0][0].signal.aborted).toBe(true);
       expect(screen.queryByRole('article')).not.toBeInTheDocument();
     }
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
@@ -589,7 +648,7 @@ describe('book list UI', () => {
     render(<App />);
     const title = screen.getByLabelText('Book name');
     const author = screen.getByLabelText('Author (optional)');
-    const add = screen.getByRole('button', { name: '+ Add book' });
+    const add = screen.getByRole('button', { name: /^\+ Add books?$/ });
     await user.type(title, '   ');
     await user.click(add);
     expect(screen.getByRole('alert')).toHaveTextContent('title cannot be empty');
@@ -701,13 +760,17 @@ describe('book list UI', () => {
     expect(screen.getByLabelText('Book name')).toHaveValue('Structured draft');
     expect(screen.getByLabelText('Author (optional)')).toHaveValue('Draft author');
     await user.clear(screen.getByLabelText('Book name'));
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(screen.getByRole('alert')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'AI assisted' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
-  it('retains the original card and shows an error when AI returns multiple books', async () => {
+  it('adds all AI-extracted books together before covers finish and persists the full batch', async () => {
+    let finishSearch!: () => void;
+    vi.mocked(openLibraryClient.search).mockImplementationOnce(() => new Promise((resolve) => {
+      finishSearch = () => resolve([]);
+    }));
     vi.stubGlobal('LanguageModel', {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({
@@ -717,13 +780,22 @@ describe('book list UI', () => {
     });
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Two books');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Add one book at a time');
+    fireEvent.change(await screen.findByLabelText('Book title and author in natural language'), {
+      target: { value: 'One by Author\nTwo by Other author\nListen now\nDownload' },
+    });
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
+    expect(await screen.findByRole('article', { name: 'One by Unknown author' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Two by Unknown author' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Book title and author in natural language')).toHaveValue('');
-    expect(screen.getByRole('article', { name: 'Two books' })).toBeInTheDocument();
-    expect(screen.queryAllByRole('article')).toHaveLength(1);
-    expect(openLibraryClient.search).not.toHaveBeenCalled();
+    expect(screen.queryAllByRole('article')).toHaveLength(2);
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(saved.books.map((book: { title: string }) => book.title)).toEqual(['One', 'Two']);
+    expect(saved.gallery).toEqual(saved.books.map((book: { id: string }) => book.id));
+    expect(saved.books.every((book: { pendingInput?: string }) => book.pendingInput === undefined)).toBe(true);
+    expect(openLibraryClient.search).toHaveBeenCalledOnce();
+    await act(async () => finishSearch());
+    await waitFor(() => expect(openLibraryClient.search).toHaveBeenCalledTimes(2));
   });
 
   it('shows storage errors and does not replace invalid data until explicit recovery', async () => {
@@ -732,7 +804,7 @@ describe('book list UI', () => {
     render(<App />);
     expect(screen.getByRole('alert')).toHaveTextContent('not been overwritten');
     await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Temporary book');
-    await user.click(screen.getByRole('button', { name: '+ Add book' }));
+    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(localStorage.getItem(STORAGE_KEY)).toBe('invalid');
     await user.click(screen.getByRole('button', { name: 'Reset saved data and current list' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

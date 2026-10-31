@@ -23,7 +23,7 @@ async function keyboardDrag(page: Page, card: Locator, key: string, targetId: st
 async function addBooks(page: Page, text: string) {
   for (const book of text.split('\n')) {
     await page.getByLabel('Book title and author in natural language').fill(book);
-    await page.getByRole('button', { name: '+ Add book' }).click();
+    await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
     await expect(page.locator('.chrome-spinner')).toHaveCount(0);
   }
 }
@@ -95,7 +95,101 @@ test('bulk insert works without AI, fits mobile, and restores the batch after re
   await expect(gallery.getByRole('article')).toHaveCount(3);
 });
 
-test('compact entry modes support keyboard submission and responsive structured fields', async ({ page }, testInfo) => {
+for (const mode of ['Manual entry', 'Bulk insert', 'AI assisted']) {
+  test(`${mode} scrolls the gallery to the last newly added book`, async ({ page }) => {
+    let board = importBooks(createBoard(), [
+      ...Array.from({ length: 12 }, (_, index) => ({ title: `Existing ${index + 1}`, author: '' })),
+      { title: 'Ranked book', author: '' },
+    ]);
+    board.books.forEach((book) => { book.coverSelection = { kind: 'placeholder' }; });
+    board = moveBook(board, board.gallery[12], 'tier-S');
+    await page.setViewportSize({ width: 375, height: 900 });
+    await openBoard(page, board);
+    const gallery = page.locator('.gallery-zone');
+    expect(await gallery.evaluate((element) => element.scrollLeft)).toBe(0);
+    await page.getByRole('button', { name: mode, exact: true }).click();
+    if (mode === 'Manual entry') {
+      await page.getByLabel('Book name', { exact: true }).fill('Newest book');
+    } else if (mode === 'Bulk insert') {
+      await page.getByLabel('Books to add', { exact: true }).fill('First new book\nNewest book');
+    } else {
+      await page.getByLabel('Book title and author in natural language').fill('First new book\nNewest book');
+    }
+    const pageTop = await page.evaluate(() => window.scrollY);
+    await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
+    await expect(gallery.getByRole('article', { name: 'Newest book by Unknown author', exact: true })).toHaveCount(1);
+    await expect.poll(async () => gallery.evaluate((element) => {
+      const card = element.querySelector<HTMLElement>('.book-card:last-of-type')!;
+      const bounds = element.getBoundingClientRect();
+      const cardBounds = card.getBoundingClientRect();
+      const left = bounds.left + element.clientLeft;
+      return cardBounds.left >= left - 1 && cardBounds.right <= left + element.clientWidth + 1;
+    })).toBe(true);
+    expect(await gallery.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(pageTop);
+
+    await gallery.evaluate((element) => { element.scrollLeft = 0; });
+    const ranked = page.getByRole('region', { name: 'Tier S', exact: true })
+      .getByRole('article', { name: 'Ranked book by Unknown author', exact: true });
+    await ranked.hover();
+    await ranked.getByRole('button', { name: 'Remove Ranked book', exact: true }).click();
+    await expect(gallery.getByRole('article', { name: 'Ranked book by Unknown author', exact: true })).toHaveCount(1);
+    expect(await gallery.evaluate((element) => element.scrollLeft)).toBe(0);
+  });
+}
+
+test('AI imports an entire 50-book library into the gallery before cover lookup completes', async ({ page }) => {
+  const books = Array.from({ length: 50 }, (_, index) => ({
+    title: `Library Book ${index + 1}`, author: `Author ${index + 1}`,
+  }));
+  const text = books.map(({ title, author }) =>
+    `${title} By ${author}\n${title}: A Novel\nBy: ${author}\nNarrated by: Someone Else\n` +
+    `${'Library description. '.repeat(35)}\n\nListen now\n\nDownload\n`,
+  ).join('');
+  const inputs: string[] = [];
+  await page.route('**/test-ai-library', async (route) => {
+    const input = route.request().postData()!;
+    inputs.push(input);
+    await route.fulfill({ json: {
+      books: [...input.matchAll(/^(Library Book \d+)\nBy: (Author \d+)$/gmu)]
+        .map((match) => ({ title: match[1], author: match[2] })),
+    } });
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'LanguageModel', {
+      configurable: true, value: {
+        availability: async () => 'available',
+        create: async () => ({
+          prompt: async (input: string) => (await fetch('/test-ai-library', { method: 'POST', body: input })).text(),
+          destroy() {},
+        }),
+      },
+    });
+  });
+  let firstSearch!: Route;
+  await page.route('https://openlibrary.org/search.json?**', (route) => { firstSearch = route; });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/?ai=true');
+  const input = page.getByLabel('Book title and author in natural language');
+  await input.fill(text);
+  await page.getByRole('button', { name: '+ Add books', exact: true }).click();
+  await expect(page.locator('.gallery-zone article')).toHaveCount(50);
+  await expect(input).toHaveValue('');
+  expect(inputs.length).toBeGreaterThan(1);
+  expect(inputs.join('')).toBe(text.replace(/^(Library Book \d+) By Author \d+\nLibrary Book \d+: A Novel\n/gmu, '$1\n'));
+  expect(inputs.every((chunk) => chunk.length <= 6_000)).toBe(true);
+  const snapshot = await page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!));
+  expect(snapshot.books.map(({ title, author }: { title: string; author: string }) => ({ title, author }))).toEqual(books);
+  expect(snapshot.gallery).toEqual(snapshot.books.map((book: { id: string }) => book.id));
+  expect(snapshot.books.every((book: { pendingInput?: string }) => book.pendingInput === undefined)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await expect.poll(() => !!firstSearch).toBe(true);
+  await firstSearch.fulfill({ json: { docs: [] } });
+  await page.reload();
+  await expect(page.locator('.gallery-zone article')).toHaveCount(50);
+});
+
+test('multiline AI entry and compact manual entry support responsive fields and keyboard submission', async ({ page }, testInfo) => {
   await page.goto('/?ai=true');
   async function expectFullWidthEntry() {
     const panel = page.getByRole('region', { name: 'Add books', exact: true });
@@ -126,18 +220,18 @@ test('compact entry modes support keyboard submission and responsive structured 
   }
   await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const input = page.getByLabel('Book title and author in natural language');
-  await expect(input).toHaveJSProperty('tagName', 'INPUT');
+  await expect(input).toHaveJSProperty('tagName', 'TEXTAREA');
   const bounds = await input.boundingBox();
   if (!bounds) throw new Error('Book input is not visible.');
-  expect(bounds.height).toBeLessThan(52);
+  expect(bounds.height).toBeGreaterThan(100);
   for (const width of [1360, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await expectFullWidthEntry();
     const field = await input.boundingBox();
-    const button = await page.getByRole('button', { name: '+ Add book', exact: true }).boundingBox();
+    const button = await page.getByRole('button', { name: /^\+ Add books?$/, exact: true }).boundingBox();
     if (!field || !button) throw new Error('Chrome AI entry controls are not visible.');
-    expect(button.x).toBeGreaterThan(field.x + field.width);
-    expect(Math.abs(button.y + button.height / 2 - field.y - field.height / 2)).toBeLessThan(1);
+    expect(button.y).toBeGreaterThan(field.y + field.height);
+    expect(button.x).toBe(field.x);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
   await page.setViewportSize({ width: 1360, height: 900 });
@@ -153,7 +247,7 @@ test('compact entry modes support keyboard submission and responsive structured 
     const title = await page.getByLabel('Book name', { exact: true }).boundingBox();
     const author = await page.getByLabel('Author (optional)', { exact: true }).boundingBox();
     if (!title || !author) throw new Error('Structured inputs are not visible.');
-    const button = await page.getByRole('button', { name: '+ Add book', exact: true }).boundingBox();
+    const button = await page.getByRole('button', { name: /^\+ Add books?$/, exact: true }).boundingBox();
     if (!button) throw new Error('Structured submit button is not visible.');
     if (width > 700) {
       expect(title.y).toBe(author.y);
@@ -217,7 +311,7 @@ test('non-Chrome browsers default to structured entry and can add without a lang
   await expect(page.getByRole('button', { name: 'Manual entry', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'AI assisted', exact: true })).toHaveCount(0);
   await page.getByLabel('Book name', { exact: true }).fill('A book without AI');
-  await page.getByRole('button', { name: '+ Add book', exact: true }).click();
+  await page.getByRole('button', { name: /^\+ Add books?$/, exact: true }).click();
   await expect(page.getByRole('article', { name: 'A book without AI by Unknown author' })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('article', { name: 'A book without AI by Unknown author' })).toBeVisible();
@@ -241,7 +335,7 @@ test('Safari manual entry automatically matches covers without Chrome AI', async
   await page.goto('/');
   await page.getByLabel('Book name', { exact: true }).fill('Hyperion');
   await page.getByLabel('Author (optional)', { exact: true }).fill('Dan');
-  await page.getByRole('button', { name: '+ Add book', exact: true }).click();
+  await page.getByRole('button', { name: /^\+ Add books?$/, exact: true }).click();
   const card = page.getByRole('article', { name: 'Hyperion by Dan Simmons' });
   await expect(card).toBeVisible();
   await expect(card.locator('img')).toHaveAttribute('data-selected-cover', 'true');
@@ -253,7 +347,7 @@ test('Safari manual entry automatically matches covers without Chrome AI', async
   await expect(card.locator('img')).toHaveAttribute('data-cover-url', 'https://covers.openlibrary.org/b/id/456-M.jpg?default=false');
 });
 
-test('Chrome AI submissions appear immediately, stay rankable, and process independently of further input', async ({ page }, testInfo) => {
+test('AI button spins without adding long-text cards until the entire batch is ready', async ({ page }) => {
   const prompts: Route[] = [];
   await page.route('**/test-ai-extraction?**', (route) => { prompts.push(route); });
   await page.goto('/?ai=true');
@@ -269,40 +363,54 @@ test('Chrome AI submissions appear immediately, stay rankable, and process indep
       }),
     };
   });
-  const texts = ['  Dune: A Novel by Frank  Herbert  ', 'Invalid model result', 'Piranesi by Susanna Clarke'];
+  const text = 'Library notes\n'.repeat(1000);
   const input = page.getByLabel('Book title and author in natural language');
-  for (const text of texts) {
-    await input.fill(text);
-    await page.getByRole('button', { name: '+ Add book', exact: true }).click();
-    await expect(input).toHaveValue('');
-    await expect(input).toBeEnabled();
-    const card = page.getByRole('article', { name: text.trim().replace(/\s+/gu, ' '), exact: true });
-    expect(await card.locator('.book-title').textContent()).toBe(text);
-    await expect(card.locator('.book-author')).toHaveCount(0);
-    await expect(card.locator('.chrome-spinner')).toHaveCSS('animation-name', 'cover-spin');
-  }
-  await expect(page.locator('.gallery-zone article')).toHaveCount(3);
+  const button = page.getByRole('button', { name: '+ Add books', exact: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await input.fill(text);
+  await button.click();
+  await expect(page.locator('.gallery-zone article')).toHaveCount(0);
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveAttribute('aria-busy', 'true');
+  await expect(button.locator('.entry-spinner')).toHaveCSS('animation-name', 'cover-spin');
+  await expect(input).toHaveValue(text);
+  await expect(input).toBeDisabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect.poll(() => prompts.length).toBe(1);
-  await expect(page.locator('#entry-form [role="status"]')).toHaveCount(0);
-  await expect(page.getByText(/Preparing Chrome AI|Checking Chrome AI|Extracting and normalizing|Downloading Chrome AI/)).toHaveCount(0);
-  await input.fill('Unsubmitted draft');
-  const first = page.getByRole('article', { name: 'Dune: A Novel by Frank Herbert', exact: true });
-  const id = await first.getAttribute('data-book-id');
-  await keyboardDrag(page, first.getByRole('button', { name: 'Drag Dune: A Novel by Frank Herbert' }), 'ArrowDown', 'tier-S');
-  await page.screenshot({ path: testInfo.outputPath('pending-chrome-ai.png'), fullPage: true });
+
+  await page.getByRole('button', { name: 'Manual entry', exact: true }).click();
+  await page.getByLabel('Book name', { exact: true }).fill('Manual book');
+  await page.getByRole('button', { name: '+ Add book', exact: true }).click();
+  await expect(page.locator('.gallery-zone article')).toHaveCount(1);
+  await page.getByRole('button', { name: 'AI assisted', exact: true }).click();
+  await expect(button).toBeDisabled();
   await prompts[0].fulfill({ json: { books: [{ title: 'Dune', author: 'Frank Herbert' }] } });
-  const ranked = page.getByRole('region', { name: 'Tier S', exact: true }).getByRole('article', { name: 'Dune by Frank Herbert' });
-  await expect(ranked).toHaveAttribute('data-book-id', id!);
   await expect.poll(() => prompts.length).toBe(2);
-  await prompts[1].fulfill({ body: 'invalid JSON' });
-  const failed = page.getByRole('article', { name: 'Invalid model result', exact: true });
-  await expect(failed.getByRole('alert')).toContainText('invalid JSON');
-  await expect(failed.getByRole('button', { name: 'Retry', exact: true })).toBeVisible();
+  await expect(page.locator('.gallery-zone article')).toHaveCount(1);
+  await prompts[1].fulfill({ json: { books: [{ title: 'Piranesi', author: 'Susanna Clarke' }] } });
   await expect.poll(() => prompts.length).toBe(3);
-  await prompts[2].fulfill({ json: { books: [{ title: 'Piranesi', author: 'Susanna Clarke' }] } });
+  await expect(page.locator('.gallery-zone article')).toHaveCount(1);
+  await expect(button).toBeDisabled();
+  await prompts[2].fulfill({ json: { books: [{ title: 'The Hobbit', author: 'J. R. R. Tolkien' }] } });
+  await expect(page.locator('.gallery-zone article')).toHaveCount(4);
   await expect(page.getByRole('article', { name: 'Piranesi by Susanna Clarke' })).toBeVisible();
-  await expect(input).toHaveValue('Unsubmitted draft');
-  await expect(page.locator('.chrome-spinner')).toHaveCount(0);
+  await expect(input).toHaveValue('');
+  await expect(button).toBeEnabled();
+  await expect(button.locator('.entry-spinner')).toHaveCount(0);
+
+  await input.fill('Invalid model result');
+  await button.click();
+  await expect.poll(() => prompts.length).toBe(4);
+  await prompts[3].fulfill({ body: 'invalid JSON' });
+  await expect(page.getByRole('alert')).toContainText('invalid JSON');
+  await expect(input).toHaveValue('Invalid model result');
+  await expect(button).toBeEnabled();
+  await expect(page.locator('.gallery-zone article')).toHaveCount(4);
+  await button.click();
+  await expect.poll(() => prompts.length).toBe(5);
+  await prompts[4].fulfill({ json: { books: [{ title: 'Retry result', author: '' }] } });
+  await expect(page.locator('.gallery-zone article')).toHaveCount(5);
+  await expect(input).toHaveValue('');
 });
 
 test('pointer dragging, within-tier ordering, cross-tier moves, gallery return, and refresh', async ({ page }, testInfo) => {

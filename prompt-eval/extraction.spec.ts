@@ -31,6 +31,11 @@ test.beforeAll(async ({ baseURL }) => {
     },
   );
   page = await context.newPage();
+  // Development reloads must not interrupt on-device inference during evaluation.
+  await page.route('**/@vite/client', (route) => route.fulfill({
+    contentType: 'application/javascript',
+    body: 'export function createHotContext() {} export function injectQuery(url) { return url; }',
+  }));
   if (!baseURL) throw new Error('The prompt evaluation requires a configured baseURL.');
   await page.goto(baseURL);
   page.on('console', (message) => {

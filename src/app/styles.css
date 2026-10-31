@@ -276,14 +276,6 @@ main {
   gap: 14px;
 }
 
-.ai-entry-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 12px;
-}
-
-.ai-entry-row>.primary-button,
 .structured-fields>.primary-button {
   min-height: 47px;
   justify-self: start;
@@ -486,6 +478,23 @@ main {
   margin-top: 6px;
 }
 
+.ranking-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clear-rankings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+}
+
 .section-heading>.eyebrow {
   font-size: 9px;
   letter-spacing: 1px;
@@ -685,6 +694,13 @@ main {
 
 .chrome-spinner {
   animation: cover-spin 1.4s linear infinite;
+}
+
+.entry-spinner {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: text-bottom;
+  animation: cover-spin .8s linear infinite;
 }
 
 @keyframes cover-spin {
@@ -1384,7 +1400,8 @@ main {
   }
 
   .cover-spinner,
-  .chrome-spinner {
+  .chrome-spinner,
+  .entry-spinner {
     animation-duration: 2s;
   }
 }

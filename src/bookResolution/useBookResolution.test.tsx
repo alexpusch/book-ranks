@@ -1,20 +1,140 @@
 import { useRef, useState } from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { createBoard, importBooks, moveBook, removeBook, type Board, type BoardChange } from '../board/board';
+import { createBoard, importBooks, moveBook, queueBook, removeBook, type Board, type BoardChange } from '../board/board';
 import { openLibraryClient } from '../integrations/openLibrary/client';
 import type { WorkCandidate } from '../integrations/openLibrary/types';
 import { useBookResolution } from './useBookResolution';
+import { extractBooks } from './extraction';
+
+vi.mock('./extraction', () => ({ extractBooks: vi.fn() }));
 
 vi.mock('../integrations/openLibrary/client', () => ({
   openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
 }));
 
 beforeEach(() => {
+  vi.mocked(extractBooks).mockReset();
   vi.mocked(openLibraryClient.search).mockReset().mockResolvedValue([]);
   vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
     works: await openLibraryClient.search(input, signal), nextCursor: null,
   }));
+});
+
+it.each([
+  { title: 'Dune', author: 'Someone else' },
+  { title: 'Dune Messiah', author: 'Frank Herbert' },
+  { title: 'Dune', author: '' },
+])('keeps multiple-match review without both exact fields: $title / $author', async (input) => {
+  const works: WorkCandidate[] = [
+    { id: 'OL1W', title: 'Dune', authors: ['Frank Herbert'], covers: [{ coverId: 123 }],
+      editions: [], nextCursor: null },
+    { id: 'OL2W', title: 'Other book', authors: [], covers: [], editions: [], nextCursor: null },
+  ];
+  vi.mocked(openLibraryClient.search).mockResolvedValueOnce(works);
+  const initial = importBooks(createBoard(), [input]);
+  const { result } = renderHook(() => useBoardResolution(initial));
+  await waitFor(() => expect(result.current.states[initial.books[0].id]).toMatchObject({
+    outcome: 'needs-review', works,
+  }));
+  expect(result.current.board).toEqual(initial);
+});
+
+it('persists an exact multi-author match without artwork and never reviews the other works', async () => {
+  const exact: WorkCandidate = {
+    id: 'OL2W', title: 'Good Omens', authors: ['Terry Pratchett', 'Neil Gaiman'],
+    covers: [], editions: [], nextCursor: null,
+  };
+  vi.mocked(openLibraryClient.search).mockResolvedValueOnce([
+    { ...exact, id: 'OL1W', authors: ['Terry Pratchett'], covers: [{ coverId: 123 }] }, exact,
+    { ...exact, id: 'OL3W', covers: [{ coverId: 456 }] },
+  ]);
+  const initial = importBooks(createBoard(), [
+    { title: 'good omens', author: 'terry pratchett, neil gaiman' },
+  ]);
+  const id = initial.books[0].id;
+  const { result } = renderHook(() => useBoardResolution(initial));
+  await waitFor(() => expect(result.current.board.books[0].matchedWorkId).toBe('OL2W'));
+  expect(result.current.board.books[0]).toMatchObject({
+    title: 'Good Omens', author: 'Terry Pratchett, Neil Gaiman',
+  });
+  expect(result.current.board.books[0].coverSelection).toBeUndefined();
+  expect(result.current.states[id]).toMatchObject({ works: [exact] });
+});
+
+it('uses AI matching for every extracted book, not manual multiple-match review', async () => {
+  vi.mocked(extractBooks).mockResolvedValue([
+    { title: 'Dune', author: 'Frank Herbert' }, { title: 'Hyperion', author: 'Dan Simmons' },
+  ]);
+  vi.mocked(openLibraryClient.search).mockImplementation(async (book) => [
+    { id: book.title === 'Dune' ? 'OL1W' : 'OL2W', title: book.title, authors: book.author ? [book.author] : [],
+      covers: [{ coverId: 123 }], editions: [], nextCursor: null },
+    { id: 'OL3W', title: 'Other book', authors: [], covers: [], editions: [], nextCursor: null },
+  ]);
+  const { result } = renderHook(() => useBoardResolution(queueBook(createBoard(), 'My library')));
+  await waitFor(() => expect(result.current.board.books.every((book) => book.matchedWorkId)).toBe(true));
+  expect(result.current.board.books).toHaveLength(2);
+  expect(Object.values(result.current.states).map((state) => state.outcome)).toEqual(['matched', 'matched']);
+  expect(extractBooks).toHaveBeenCalledOnce();
+  expect(openLibraryClient.search).toHaveBeenCalledTimes(2);
+});
+
+it('imports an extracted batch atomically and queues AI matching without extracting it again', async () => {
+  vi.mocked(openLibraryClient.search).mockImplementation(async (book) => [
+    { id: book.title === 'Dune' ? 'OL1W' : 'OL2W', title: book.title, authors: ['Author'],
+      covers: [{ coverId: 123 }], editions: [], nextCursor: null },
+    { id: 'OL3W', title: 'Other book', authors: [], covers: [], editions: [], nextCursor: null },
+  ]);
+  const { result } = renderHook(() => useBoardResolution(createBoard()));
+  act(() => {
+    expect(result.current.addAiBooks([{ title: 'Dune', author: '' }, { title: 'Hyperion', author: '' }])).toBe(true);
+  });
+  expect(result.current.board.books).toHaveLength(2);
+  expect(result.current.board.books.every((book) => book.pendingInput === undefined)).toBe(true);
+  await waitFor(() => expect(Object.values(result.current.states).map((state) => state.outcome)).toEqual(['matched', 'matched']));
+  expect(extractBooks).not.toHaveBeenCalled();
+});
+
+it('does not queue or publish an extracted batch when adding it is rejected', () => {
+  const initial = createBoard();
+  const change = vi.fn().mockReturnValue(false);
+  const { result } = renderHook(() => useBookResolution(initial, change));
+  act(() => {
+    expect(result.current.addAiBooks([{ title: 'Dune', author: '' }])).toBe(false);
+  });
+  expect(result.current.states).toEqual({});
+  expect(initial.books).toHaveLength(0);
+  expect(openLibraryClient.search).not.toHaveBeenCalled();
+});
+
+it('keeps a failed batch intact for retry and continues with the next submission', async () => {
+  vi.mocked(extractBooks).mockRejectedValueOnce(new Error('Invalid batch output'))
+    .mockResolvedValueOnce([{ title: 'Later book', author: '' }])
+    .mockResolvedValueOnce([{ title: 'One', author: '' }, { title: 'Two', author: '' }]);
+  const initial = queueBook(queueBook(createBoard(), 'Failed batch'), 'Later submission');
+  const id = initial.books[0].id;
+  const { result } = renderHook(() => useBoardResolution(initial));
+  await waitFor(() => expect(result.current.board.books[1].title).toBe('Later book'));
+  expect(result.current.states[id]).toMatchObject({ outcome: 'error', error: 'Invalid batch output' });
+  expect(result.current.board.books[0].pendingInput).toBe('Failed batch');
+  act(() => result.current.retry(id));
+  await waitFor(() => expect(result.current.board.books).toHaveLength(3));
+  expect(result.current.board.books[0]).toMatchObject({ id, title: 'One' });
+  expect(result.current.board.gallery.map((bookId) => result.current.board.books.find((book) => book.id === bookId)?.title))
+    .toEqual(['One', 'Two', 'Later book']);
+  expect(extractBooks).toHaveBeenCalledTimes(3);
+});
+
+it('ignores an entire late batch after its pending card is removed', async () => {
+  let finish!: (entries: { title: string; author: string }[]) => void;
+  vi.mocked(extractBooks).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  const initial = queueBook(createBoard(), 'Deleted library');
+  const { result } = renderHook(() => useBoardResolution(initial));
+  act(() => result.current.change((board) => removeBook(board, initial.books[0].id)));
+  await act(async () => finish([{ title: 'One', author: '' }, { title: 'Two', author: '' }]));
+  expect(result.current.board.books).toHaveLength(0);
+  expect(result.current.states).toEqual({});
+  expect(openLibraryClient.search).not.toHaveBeenCalled();
 });
 
 function useBoardResolution(initial: Board) {

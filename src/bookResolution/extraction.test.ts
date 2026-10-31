@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { extractBooks } from './extraction';
 import { getModelDownloadProgress, subscribeModelDownload, type BookLanguageModel } from '../integrations/chromeAi/prompt';
 
-const prompt = vi.fn();
+const prompt = vi.fn<(input: string, options: { responseConstraint: object; signal: AbortSignal }) => Promise<string>>();
 const destroy = vi.fn();
 const create = vi.fn<BookLanguageModel['create']>();
 const availability = vi.fn<BookLanguageModel['availability']>();
@@ -22,11 +22,11 @@ describe('Chrome book extraction', () => {
     const signal = new AbortController().signal;
     expect(await extractBooks(input, vi.fn(), signal)).toEqual([{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }]);
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      signal,
+      signal: expect.any(AbortSignal),
       initialPrompts: [{ role: 'system', content: expect.stringContaining('Extract search-ready book titles and author names') }],
     }));
     expect(prompt).toHaveBeenCalledWith(input, {
-      signal,
+      signal: expect.any(AbortSignal),
       responseConstraint: expect.objectContaining({ required: ['books'] }),
     });
     expect(destroy).toHaveBeenCalledOnce();
@@ -51,6 +51,85 @@ describe('Chrome book extraction', () => {
     expect(await extractBooks('some books', vi.fn(), new AbortController().signal)).toEqual([{ title: 'Dune', author: 'Frank Herbert' }]);
     prompt.mockResolvedValueOnce(JSON.stringify({ books: [{ title: 'Title | Subtitle', author: '' }] }));
     expect(await extractBooks('some books', vi.fn(), new AbortController().signal)).toEqual([{ title: 'Title | Subtitle', author: '' }]);
+  });
+
+  it('extracts all 50 entries from a long Audible-style paste in bounded, ordered chunks', async () => {
+    const entries = Array.from({ length: 50 }, (_, index) => ({
+      title: `Library Book ${index + 1}`, author: `Author ${index + 1}`,
+    }));
+    const text = entries.map(({ title, author }) =>
+      `${title} By ${author}\n${title}: A Novel\nBy: ${author}\nNarrated by: Someone Else\n` +
+      `interactive rating stars Write a review\n${'Retailer description. '.repeat(35)}\n\nListen now\n\nDownload\n`,
+    ).join('');
+    prompt.mockImplementation(async (chunk: string) => JSON.stringify({
+      books: [...chunk.matchAll(/^(Library Book \d+)\nBy: (Author \d+)$/gmu)]
+        .map((match) => ({ title: match[1], author: match[2] })),
+    }));
+    expect(await extractBooks(text, vi.fn(), new AbortController().signal)).toEqual(entries);
+    expect(prompt.mock.calls.length).toBeGreaterThan(1);
+    const chunks = prompt.mock.calls.map(([chunk]) => chunk);
+    expect(chunks.join('')).toBe(text.replace(/^(Library Book \d+) By Author \d+\nLibrary Book \d+: A Novel\n/gmu, '$1\n'));
+    expect(chunks.every((chunk) => chunk.length <= 6_000)).toBe(true);
+    for (const { title, author } of entries) {
+      expect(chunks.filter((chunk) => chunk.includes(`${title}\nBy: ${author}`))).toHaveLength(1);
+    }
+    expect(destroy).toHaveBeenCalledTimes(chunks.length);
+    const instructions = create.mock.calls[0][0].initialPrompts[0].content;
+    expect(instructions).toContain('Extract EVERY book entry');
+    expect(instructions).toContain('not "Narrated by:"');
+    expect(instructions).toContain('same library entry as one book');
+  });
+
+  it('removes only proven duplicate Audible headings, preserving distinct entries and full author lines', async () => {
+    const text = 'Sample By Pen Name\nSample: A Novel\nBy: Pen Name, Full Name\n\n' +
+      'Dune By Frank Herbert\nDifferent Book\nBy: Frank Herbert\n\n' +
+      'Dune By Frank Herbert\nDune Messiah\nBy: Frank Herbert\n\n' +
+      'Sample: A Novel\nBy: Pen Name, Full Name';
+    await extractBooks(text, vi.fn(), new AbortController().signal);
+    expect(prompt.mock.calls[0][0]).toBe(text.replace('Sample By Pen Name\nSample: A Novel\n', 'Sample\n'));
+    expect(prompt.mock.calls[0][0]).toContain('Dune By Frank Herbert');
+    expect(prompt.mock.calls[0][0]).toContain('Dune By Frank Herbert\nDune Messiah');
+  });
+
+  it('constrains Audible output to every entry and rejects missing books instead of importing a partial library', async () => {
+    const text = 'Dune\nBy: Frank Herbert\nNarrated by: Someone\n\nPiranesi\nBy: Susanna Clarke\nNarrated by: Someone Else';
+    await expect(extractBooks(text, vi.fn(), new AbortController().signal)).rejects.toThrow('containing 2 entries');
+    expect(prompt.mock.calls[0][1].responseConstraint).toMatchObject({
+      properties: { books: { minItems: 2, maxItems: 2 } },
+    });
+  });
+
+  it('allows chunks containing only page controls without losing books from other chunks', async () => {
+    prompt.mockResolvedValueOnce('{"books":[]}');
+    prompt.mockResolvedValueOnce('{"books":[{"title":"Dune","author":""}]}');
+    const text = `${'Listen now\n\n'.repeat(500)}Dune`;
+    expect(await extractBooks(text, vi.fn(), new AbortController().signal)).toEqual([{ title: 'Dune', author: '' }]);
+  });
+
+  it('keeps oversized single-line text within the prompt limit without truncating it', async () => {
+    const text = 'Dune by Frank Herbert; '.repeat(1_000);
+    await extractBooks(text, vi.fn(), new AbortController().signal);
+    const chunks = prompt.mock.calls.map(([chunk]) => chunk);
+    expect(chunks.join('')).toBe(text);
+    expect(chunks.every((chunk) => chunk.length <= 6_000)).toBe(true);
+  });
+
+  it('rejects the entire extraction when a later chunk fails', async () => {
+    prompt.mockResolvedValueOnce('{"books":[{"title":"Dune","author":""}]}');
+    prompt.mockResolvedValueOnce('invalid JSON');
+    await expect(extractBooks('Dune\n\n'.repeat(2_000), vi.fn(), new AbortController().signal))
+      .rejects.toThrow('invalid JSON');
+    expect(prompt).toHaveBeenCalledTimes(2);
+  });
+
+  it('cancels before processing more chunks', async () => {
+    const controller = new AbortController();
+    prompt.mockImplementationOnce(async () => {
+      controller.abort();
+      return '{"books":[{"title":"Dune","author":""}]}';
+    });
+    await expect(extractBooks('Dune\n\n'.repeat(2_000), vi.fn(), controller.signal)).rejects.toThrow();
+    expect(prompt).toHaveBeenCalledOnce();
   });
 
   it.each(['', ' \n '])('rejects empty input before using the model', async (text) => {

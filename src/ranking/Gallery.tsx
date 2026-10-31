@@ -4,7 +4,24 @@ import { BookZone, type BoardProps } from './BookZone';
 
 export function Gallery(props: BoardProps) {
   const sectionRef = useRef<HTMLElement>(null);
+  const previousBookIds = useRef(new Set(props.board.books.map((book) => book.id)));
   const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const addedId = [...props.board.gallery].reverse().find((id) => !previousBookIds.current.has(id));
+    previousBookIds.current = new Set(props.board.books.map((book) => book.id));
+    if (!addedId) return;
+    const zone = sectionRef.current?.querySelector<HTMLElement>('[data-zone="gallery"]');
+    const card = Array.from(zone?.querySelectorAll<HTMLElement>('[data-book-id]') ?? [])
+      .find((element) => element.dataset.bookId === addedId);
+    if (!zone || !card) return;
+    const zoneBounds = zone.getBoundingClientRect();
+    const cardBounds = card.getBoundingClientRect();
+    const left = zoneBounds.left + zone.clientLeft;
+    const right = left + zone.clientWidth;
+    if (cardBounds.right > right) zone.scrollLeft += cardBounds.right - right;
+    else if (cardBounds.left < left) zone.scrollLeft += cardBounds.left - left;
+  }, [props.board.books, props.board.gallery]);
 
   useEffect(() => {
     const updateStuck = () => setStuck(sectionRef.current?.getBoundingClientRect().top === 0);

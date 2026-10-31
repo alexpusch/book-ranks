@@ -9,7 +9,7 @@ import { RankingBoard } from '../ranking/RankingBoard';
 import { useRankingDrag } from '../ranking/useRankingDrag';
 import { ExportBoard } from '../export/ExportBoard';
 import { CoverExportError, exportJpeg } from '../export/exportJpeg';
-import { GALLERY, moveBook, removeBook } from '../board/board';
+import { GALLERY, clearRankings, moveBook, removeBook } from '../board/board';
 import { useBoard } from './useBoard';
 import { useStoredPreference } from './useStoredPreference';
 
@@ -19,7 +19,7 @@ function errorMessage(error: unknown): string {
 
 export function App() {
   const [notice, setNotice] = useState('');
-  const { board, boardRef, change, storageBlocked, storageWarning, retryStorage, actionError, setActionError } = useBoard(setNotice);
+  const { board, boardRef, change, resetVersion, storageBlocked, storageWarning, retryStorage, actionError, setActionError } = useBoard(setNotice);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const theme = useStoredPreference('shelf-life.theme', ['light', 'dark'], 'light');
   const darkMode = theme.value === 'dark';
@@ -58,7 +58,7 @@ export function App() {
         {theme.warning && <div className="warning-banner" role="alert">{theme.warning}</div>}
         {storageWarning && <div className="warning-banner" role="alert"><div><strong>Browser storage needs attention</strong><p>{storageWarning}</p></div>
           <button className="secondary-button" onClick={retryStorage}>{storageBlocked ? 'Reset saved data and current list' : 'Retry saving'}</button></div>}
-        <BookEntry board={board} onChange={change} onNotice={setNotice} />
+        <BookEntry key={resetVersion} board={board} onChange={change} onNotice={setNotice} />
         <DndContext sensors={sensors} collisionDetection={collisionDetection}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd} onDragCancel={onDragCancel}>
@@ -74,7 +74,20 @@ export function App() {
           <section className="ranking-section" aria-labelledby="ranking-title">
             <div className="section-heading board-heading">
               <div><h2 id="ranking-title">Rank the books</h2>
-                <p>{rankedCount} of {board.books.length} books ranked <span aria-hidden="true">·</span></p></div>
+                <p className="ranking-progress">
+                  <span>{rankedCount} of {board.books.length} books ranked</span>
+                  <span aria-hidden="true">·</span>
+                  <button className="clear-rankings-button" type="button" disabled={rankedCount === 0}
+                    onClick={() => {
+                      if (change(clearRankings)) setNotice('All ranked books returned to your reading pile.');
+                    }}>
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
+                      strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                      <path d="m6 6 12 12M18 6 6 18" />
+                    </svg>
+                    Clear all
+                  </button>
+                </p></div>
               <div className="board-toolbar">
                 <button className="secondary-button" onClick={() => setSettingsOpen(true)}>⚙ Tier settings</button>
                 <button className="theme-toggle" type="button" role="switch" aria-checked={darkMode}

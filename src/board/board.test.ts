@@ -1,10 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GALLERY, addTier, booksAt, createBoard, deleteTier, importBooks, locationOf,
-  moveBook, queueBook, removeBook, reorderTier, updateBook, updateTier,
+  GALLERY, addTier, booksAt, clearRankings, createBoard, deleteTier, importBooks, locationOf,
+  moveBook, queueBook, removeBook, reorderTier, resolveQueuedBooks, updateBook, updateTier,
 } from './board';
 
 describe('book import', () => {
+  it('expands a pending batch atomically in gallery order, preserving its first ID and duplicates', () => {
+    let board = importBooks(createBoard(), 'Existing');
+    board = queueBook(board, 'Two books');
+    board = queueBook(board, 'Later batch');
+    const id = board.gallery[1];
+    const entries = [{ title: 'Dune', author: '' }, { title: 'Dune', author: '' }];
+    const next = resolveQueuedBooks(board, id, entries);
+    expect(next.books).toHaveLength(4);
+    expect(next.books[1]).toEqual({ id, title: 'Dune', author: 'Unknown author' });
+    expect(next.gallery).toEqual([board.gallery[0], id, next.books[3].id, board.gallery[2]]);
+    expect(board.books[1].pendingInput).toBe('Two books');
+    expect(() => resolveQueuedBooks(board, id, [])).toThrow('No books');
+    expect(() => resolveQueuedBooks(board, id, [...entries, { title: '', author: '' }])).toThrow('empty');
+    expect(() => resolveQueuedBooks(next, id, entries)).toThrow('Pending book not found');
+  });
+
+  it('keeps a ranked pending card and its artwork, placing the other extracted books in the gallery', () => {
+    let board = queueBook(createBoard(), 'Two books');
+    const id = board.gallery[0];
+    board = moveBook(board, id, 'tier-S');
+    board.books[0].coverSelection = { kind: 'placeholder' };
+    const next = resolveQueuedBooks(board, id, [
+      { title: 'Dune', author: 'Frank Herbert' }, { title: 'Piranesi', author: '' },
+    ]);
+    expect(next.tiers).toEqual(board.tiers);
+    expect(next.books[0]).toEqual({ id, title: 'Dune', author: 'Frank Herbert', coverSelection: { kind: 'placeholder' } });
+    expect(next.gallery).toEqual([next.books[1].id]);
+    expect(next.books[1].coverSelection).toBeUndefined();
+  });
+
   it('queues the exact input and resolves in place without losing ranking or selected artwork', () => {
     const input = '  Dune: A Novel by Frank  Herbert  ';
     let board = queueBook(createBoard(), input);
@@ -71,6 +101,31 @@ describe('book import', () => {
 
 describe('board operations', () => {
   const populated = () => importBooks(createBoard(), 'One\nTwo\nThree');
+
+  it('clears every tier into the gallery in tier and book order without changing books or tier settings', () => {
+    const original = populated();
+    const [one, two, three] = original.gallery;
+    original.books[0].coverSelection = { kind: 'placeholder' };
+    let board = moveBook(original, two, 'tier-S');
+    board = moveBook(board, one, 'tier-S');
+    board = moveBook(board, three, 'tier-E');
+    const next = clearRankings(board);
+    expect(next.gallery).toEqual([two, one, three]);
+    expect(next.books).toBe(board.books);
+    expect(next.tiers).toEqual(board.tiers.map((tier) => ({ ...tier, bookIds: [] })));
+    expect(board.gallery).toEqual([]);
+    expect(board.tiers[0].bookIds).toEqual([two, one]);
+    expect(board.tiers[5].bookIds).toEqual([three]);
+    expect(clearRankings(next)).toEqual(next);
+  });
+
+  it('keeps existing gallery books first when clearing ranks and supports an empty board', () => {
+    const original = populated();
+    const [one, two, three] = original.gallery;
+    const board = moveBook(moveBook(original, two, 'tier-S'), one, 'tier-A');
+    expect(clearRankings(board).gallery).toEqual([three, two, one]);
+    expect(clearRankings(createBoard())).toEqual(createBoard());
+  });
 
   it('moves through gallery, empty tiers, and other tiers without mutating the original', () => {
     const original = populated();

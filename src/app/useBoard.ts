@@ -13,6 +13,7 @@ export function useBoard(setNotice: (notice: string) => void) {
   const [storageBlocked, setStorageBlocked] = useState(initial.blocked);
   const [storageWarning, setStorageWarning] = useState(initial.warning);
   const [actionError, setActionError] = useState('');
+  const [resetVersion, setResetVersion] = useState(0);
   useEffect(() => {
     if (storageBlocked) return;
     try {
@@ -42,6 +43,7 @@ export function useBoard(setNotice: (notice: string) => void) {
       if (!storageBlocked) saveBoard(next);
       boardRef.current = next;
       setBoard(next);
+      if (storageBlocked) setResetVersion((version) => version + 1);
       setStorageBlocked(false);
       setStorageWarning(null);
       setNotice(storageBlocked ? 'Saved data reset. Start a fresh list.' : 'Your list is saved in this browser.');
@@ -49,5 +51,5 @@ export function useBoard(setNotice: (notice: string) => void) {
       setStorageWarning(`Storage is still unavailable. ${errorMessage(error)}`);
     }
   }
-  return { board, boardRef, change, storageBlocked, storageWarning, retryStorage, actionError, setActionError };
+  return { board, boardRef, change, resetVersion, storageBlocked, storageWarning, retryStorage, actionError, setActionError };
 }

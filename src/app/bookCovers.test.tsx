@@ -52,12 +52,40 @@ const otherWork: WorkCandidate = {
   id: 'OL2W', title: 'Dune Messiah', authors: ['Frank Herbert'], covers: [{ coverId: 789 }],
   editions: [], nextCursor: '0',
 };
+const ambiguousWork = { ...work, authors: ['F. Herbert'] };
+
+it.each(['Manual entry', 'Bulk insert'])('automatically selects an exact title and author in %s', async (mode) => {
+  window.history.replaceState(null, '', '/');
+  search.mockResolvedValueOnce([otherWork, work]);
+  const rendered = render(<App />);
+  await userEvent.click(screen.getByRole('button', { name: mode }));
+  if (mode === 'Bulk insert') {
+    await userEvent.type(screen.getByLabelText('Books to add'), 'dUnE | fRaNk HeRbErT');
+  } else {
+    await userEvent.type(screen.getByLabelText('Book name'), 'dUnE');
+    await userEvent.type(screen.getByLabelText(/Author/), 'fRaNk HeRbErT');
+  }
+  await userEvent.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
+  await waitFor(() => expect(saved().books[0]).toMatchObject({
+    title: 'Dune', author: 'Frank Herbert', matchedWorkId: 'OL1W',
+    coverSelection: { kind: 'open-library', workId: 'OL1W', coverId: 123 },
+  }));
+  expect(screen.queryByText('Multiple matches')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Drag Dune' })).toBeInTheDocument();
+  expect(editions).not.toHaveBeenCalled();
+  expect(window.LanguageModel!.create).not.toHaveBeenCalled();
+  rendered.unmount();
+  search.mockClear();
+  render(<App />);
+  expect(screen.getByRole('button', { name: 'Edit Dune' })).toBeInTheDocument();
+  expect(search).not.toHaveBeenCalled();
+});
 
 it('appends more matches, deduplicates work IDs, and pages the submitted query rather than edited drafts', async () => {
   seed();
   const thirdWork = { ...work, id: 'OL3W', title: 'Children of Dune' };
   const page = vi.mocked(openLibraryClient.searchPage);
-  page.mockResolvedValueOnce({ works: [work, otherWork], nextCursor: '10' })
+  page.mockResolvedValueOnce({ works: [ambiguousWork, otherWork], nextCursor: '10' })
     .mockResolvedValueOnce({ works: [otherWork, thirdWork, thirdWork], nextCursor: '20' })
     .mockResolvedValueOnce({ works: [], nextCursor: null });
   render(<App />);
@@ -89,7 +117,7 @@ it('appends more matches, deduplicates work IDs, and pages the submitted query r
 it('keeps earlier matches on a pagination failure and retries the same page', async () => {
   const board = seed();
   const page = vi.mocked(openLibraryClient.searchPage);
-  page.mockResolvedValueOnce({ works: [work, otherWork], nextCursor: '10' })
+  page.mockResolvedValueOnce({ works: [ambiguousWork, otherWork], nextCursor: '10' })
     .mockRejectedValueOnce(new Error('More results offline'))
     .mockResolvedValueOnce({ works: [{ ...work, id: 'OL3W', title: 'Children of Dune' }], nextCursor: null });
   render(<App />);
@@ -97,7 +125,7 @@ it('keeps earlier matches on a pagination failure and retries the same page', as
   const dialog = screen.getByRole('dialog');
   await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('More results offline');
-  expect(within(dialog).getByRole('button', { name: 'Select Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(within(dialog).getByRole('button', { name: 'Select Dune by F. Herbert' })).toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
   expect(await within(dialog).findByRole('button', { name: 'Select Children of Dune by Frank Herbert' })).toBeInTheDocument();
   expect(page.mock.calls[1][0].cursor).toBe('10');
@@ -109,7 +137,7 @@ it('refining a search cancels pagination, resets its cursor, and ignores its lat
   seed();
   let finish!: (works: { works: WorkCandidate[]; nextCursor: string | null }) => void;
   const page = vi.mocked(openLibraryClient.searchPage);
-  page.mockResolvedValueOnce({ works: [work, otherWork], nextCursor: '10' })
+  page.mockResolvedValueOnce({ works: [ambiguousWork, otherWork], nextCursor: '10' })
     .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
     .mockResolvedValueOnce({ works: [otherWork], nextCursor: '10' });
   render(<App />);
@@ -135,7 +163,7 @@ it('refining a search cancels pagination, resets its cursor, and ignores its lat
 it.each(['available', 'unavailable'] as const)('reviews multiple manual matches with Chrome AI %s, then persists the selected book', async (availability) => {
   vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
   const board = seed();
-  search.mockResolvedValueOnce([work, otherWork]);
+  search.mockResolvedValueOnce([ambiguousWork, otherWork]);
   const rendered = render(<App />);
   const label = await screen.findByText('Multiple matches');
   const card = label.closest('article')!;
@@ -171,7 +199,7 @@ it.each(['available', 'unavailable'] as const)('reviews multiple manual matches 
 
 it('refines review searches without changing the book until choosing a result, including results without covers', async () => {
   const board = seed();
-  search.mockResolvedValueOnce([work, otherWork]).mockResolvedValueOnce([{ ...otherWork, covers: [] }]);
+  search.mockResolvedValueOnce([ambiguousWork, otherWork]).mockResolvedValueOnce([{ ...otherWork, covers: [] }]);
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
   const dialog = screen.getByRole('dialog');
@@ -192,7 +220,7 @@ it('refines review searches without changing the book until choosing a result, i
 
 it('shows empty results and search errors in review and allows retry', async () => {
   const board = seed();
-  search.mockResolvedValueOnce([work, otherWork]).mockResolvedValueOnce([])
+  search.mockResolvedValueOnce([ambiguousWork, otherWork]).mockResolvedValueOnce([])
     .mockRejectedValueOnce(new Error('Open Library offline')).mockResolvedValueOnce([work]);
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
@@ -212,7 +240,7 @@ it('cancels replaced review searches and closing the reviewer ignores late resul
   const board = seed();
   let finishFirst!: (works: WorkCandidate[]) => void;
   let finishSecond!: (works: WorkCandidate[]) => void;
-  search.mockResolvedValueOnce([work, otherWork])
+  search.mockResolvedValueOnce([ambiguousWork, otherWork])
     .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
     .mockImplementationOnce(() => new Promise((resolve) => { finishSecond = resolve; }));
   render(<App />);
@@ -236,7 +264,7 @@ it('cancels replaced review searches and closing the reviewer ignores late resul
 it('removes unresolved multiple-match books from the gallery', async () => {
   const board = importBooks(createBoard(), 'Dune | Frank Herbert');
   persist(board);
-  search.mockResolvedValueOnce([work, otherWork]);
+  search.mockResolvedValueOnce([ambiguousWork, otherWork]);
   render(<App />);
   await screen.findByText('Multiple matches');
   await userEvent.click(screen.getByRole('button', { name: 'Remove Dune' }));
@@ -361,7 +389,7 @@ it('persists a matched identity without a cover and does not repeat lookup on re
 
 it('does not force a candidate when Chrome AI returns no suitable match', async () => {
   seed();
-  search.mockResolvedValueOnce([work]);
+  search.mockResolvedValueOnce([ambiguousWork]);
   vi.mocked(window.LanguageModel!.create).mockResolvedValueOnce({
     prompt: vi.fn().mockResolvedValue('{"workId":null}'), destroy: vi.fn(),
   });
@@ -471,7 +499,7 @@ it('ignores pending results when storage recovery resets the board', async () =>
   search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
   render(<App />);
   fireEvent.change(await screen.findByLabelText('Book title and author in natural language'), { target: { value: 'Dune | Frank Herbert' } });
-  await userEvent.click(screen.getByRole('button', { name: '+ Add book' }));
+  await userEvent.click(screen.getByRole('button', { name: '+ Add books' }));
   await userEvent.click(screen.getByRole('button', { name: 'Reset saved data and current list' }));
   await act(async () => resolve([work]));
   expect(saved().books).toHaveLength(0);
@@ -502,7 +530,7 @@ it('serializes searches, skips removed queued books, and continues after errors'
   expect(screen.getByRole('status', { name: 'Waiting for cover search: Removed' })).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Remove Removed' }));
   fireEvent.change(screen.getByLabelText('Book title and author in natural language'), { target: { value: 'Fourth' } });
-  await userEvent.click(screen.getByRole('button', { name: '+ Add book' }));
+  await userEvent.click(screen.getByRole('button', { name: '+ Add books' }));
   expect(search).toHaveBeenCalledOnce();
   await act(async () => fail(reject));
   expect(screen.getByText(/Search unavailable/)).toBeInTheDocument();

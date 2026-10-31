@@ -16,7 +16,7 @@ test('review Show more fetches the next ten results only on click and appends th
   });
   await page.goto('/');
   await page.getByLabel('Book name', { exact: true }).fill('Dune');
-  await page.getByRole('button', { name: '+ Add book' }).click();
+  await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
   const card = page.getByRole('article', { name: 'Dune by Unknown author', exact: true });
   await card.hover();
   await card.getByRole('button', { name: 'Review Dune' }).click();
@@ -50,7 +50,7 @@ for (const width of [1360, 390]) {
       const params = new URL(route.request().url()).searchParams;
       searches.push({ title: params.get('title'), author: params.get('author') });
       const docs = [
-        { key: '/works/OL1W', title: 'Dune', author_name: ['Frank Herbert'], cover_i: 123 },
+        { key: '/works/OL1W', title: 'Dune', author_name: ['F. Herbert'], cover_i: 123 },
         { key: '/works/OL2W', title: 'Dune Messiah', author_name: ['Frank Herbert'], cover_i: 789 },
       ];
       await route.fulfill({ json: { docs: params.get('title') === 'Dune Messiah' ? [docs[1]] : docs } });
@@ -58,7 +58,7 @@ for (const width of [1360, 390]) {
     await page.goto('/');
     await page.getByLabel('Book name', { exact: true }).fill('Dune');
     await page.getByLabel('Author', { exact: false }).fill('Frank Herbert');
-    await page.getByRole('button', { name: '+ Add book' }).click();
+    await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
     const card = page.getByRole('article', { name: 'Dune by Frank Herbert', exact: true });
     await expect(card.getByText('Multiple matches')).toBeVisible();
     await expect(card.locator('img')).toHaveCount(0);
@@ -138,7 +138,7 @@ test('title-only Chrome AI entry matches Children of Ruin despite a legacy editi
     ] } });
   });
   await page.getByLabel('Book title and author in natural language').fill('Children of Ruin');
-  await page.getByRole('button', { name: '+ Add book' }).click();
+  await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
   const card = page.getByRole('article', { name: 'Children of Ruin by Adrian Tchaikovsky', exact: true });
   await expect(card).toBeVisible();
   await expect(card.locator('img')).toHaveAttribute('src', /\/8750923-M\.jpg/);
@@ -176,7 +176,7 @@ test('AI-normalized titles and authors are saved and sent to Open Library lookup
     await route.fulfill({ json: { docs: [] } });
   });
   await page.getByLabel('Book title and author in natural language').fill('The Spear Cuts Through Water: A Novel by Simon Jimenez');
-  await page.getByRole('button', { name: '+ Add book' }).click();
+  await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
   await expect(page.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeVisible();
   await expect.poll(() => inputs).toEqual([{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }]);
   await page.reload();
@@ -196,18 +196,18 @@ test('serial cover searches show waiting and spinning states and saving changed 
   await page.goto('/?ai=true');
   for (const title of ['First', 'Second', 'Removed']) {
     await page.getByLabel('Book title and author in natural language').fill(title);
-    await page.getByRole('button', { name: '+ Add book' }).click();
-    await expect(page.getByRole('button', { name: '+ Add book' })).toBeEnabled();
+    await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
+    await expect(page.getByRole('button', { name: /^\+ Add books?$/ })).toBeEnabled();
   }
   const first = page.getByRole('article', { name: 'First by Unknown author', exact: true });
   const second = page.locator('.book-card').filter({ has: page.getByText('Second', { exact: true }) });
   await expect(first.getByRole('status', { name: 'Searching for cover: First' })).toBeVisible();
   await expect(first.locator('.cover-spinner')).toHaveCSS('animation-name', 'cover-spin');
-  await expect(second.getByRole('status', { name: 'Processing book: Second' })).toBeVisible();
-  await expect(second.locator('.chrome-spinner')).toHaveCSS('animation-name', 'cover-spin');
+  await expect(second.getByRole('status', { name: 'Waiting for cover search: Second' })).toBeVisible();
+  await expect(second.locator('.chrome-spinner')).toHaveCount(0);
   await expect(second.locator('.cover-spinner')).toHaveCount(0);
   expect(inputs.map((input) => input.title)).toEqual(['First']);
-  const removed = page.getByRole('article', { name: 'Removed', exact: true });
+  const removed = page.getByRole('article', { name: 'Removed by Unknown author', exact: true });
   await removed.hover();
   await removed.getByRole('button', { name: 'Remove Removed', exact: true }).click();
   release.get('First')!();
