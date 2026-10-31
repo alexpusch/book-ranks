@@ -625,8 +625,12 @@ for (const width of [1360, 390, 320]) {
     await expect(gallery).toBeInViewport();
     const entryBox = await entry.boundingBox();
     if (!entryBox) throw new Error('Book entry is not visible.');
-    expect(initial.y).toBe(entryBox.y + entryBox.height);
-    const clearButton = gallery.getByRole('button', { name: 'Clear all', exact: true });
+    const actions = page.getByRole('group', { name: 'Unranked book actions' });
+    const actionsBox = await actions.boundingBox();
+    if (!actionsBox) throw new Error('Unranked book actions are not visible.');
+    expect(actionsBox.y).toBe(entryBox.y + entryBox.height);
+    expect(initial.y).toBe(actionsBox.y + actionsBox.height);
+    const clearButton = actions.getByRole('button', { name: 'Clear all', exact: true });
     const rankClearButton = page.getByRole('region', { name: 'Rank the books' }).getByRole('button', { name: 'Clear all', exact: true });
     const clearButtonBox = await clearButton.boundingBox();
     const zoneBox = await zone.boundingBox();
@@ -643,6 +647,7 @@ for (const width of [1360, 390, 320]) {
     await expect(gallery).not.toHaveCSS('box-shadow', 'none');
     await expect(heading).not.toBeInViewport();
     await expect(entry.locator('#entry-form')).not.toBeInViewport();
+    await expect(clearButton).not.toBeInViewport();
     const pinned = await gallery.boundingBox();
     const destination = await lowerTier.boundingBox();
     if (!pinned || !destination) throw new Error('Reading pile or lower tier is not visible.');

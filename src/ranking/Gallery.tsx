@@ -35,8 +35,8 @@ export function Gallery({ onClear, ...props }: BoardProps & { onClear: () => voi
   }, []);
 
   return (
-    <section ref={sectionRef} className="gallery-section" data-stuck={stuck} aria-label="Your books">
-      <div className="gallery-toolbar">
+    <>
+      <div className="gallery-toolbar" role="group" aria-label="Unranked book actions">
         <button className="clear-books-button" type="button" disabled={props.board.gallery.length === 0}
           onClick={onClear}>
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
@@ -46,13 +46,15 @@ export function Gallery({ onClear, ...props }: BoardProps & { onClear: () => voi
           Clear all
         </button>
       </div>
-      <div className="ranking-hint">
-        <span>drag to rank</span>
-        <svg viewBox="0 0 80 90" fill="none" aria-hidden="true">
-          <path d="M47 8C16 9 10 34 29 43C49 53 62 29 43 27C21 25 21 66 61 76M48 61L63 77L43 81" />
-        </svg>
-      </div>
-      <BookZone {...props} id={GALLERY} bookIds={props.board.gallery} gallery />
-    </section>
+      <section ref={sectionRef} className="gallery-section" data-stuck={stuck} aria-label="Your books">
+        <div className="ranking-hint">
+          <span>drag to rank</span>
+          <svg viewBox="0 0 80 90" fill="none" aria-hidden="true">
+            <path d="M47 8C16 9 10 34 29 43C49 53 62 29 43 27C21 25 21 66 61 76M48 61L63 77L43 81" />
+          </svg>
+        </div>
+        <BookZone {...props} id={GALLERY} bookIds={props.board.gallery} gallery />
+      </section>
+    </>
   );
 }

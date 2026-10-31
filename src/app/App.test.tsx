@@ -72,7 +72,10 @@ describe('book list UI', () => {
     const app = render(<App />);
     const entry = screen.getByRole('region', { name: 'Add books' });
     const gallery = screen.getByRole('region', { name: 'Your books' });
-    const button = within(gallery).getByRole('button', { name: 'Clear all' });
+    const actions = screen.getByRole('group', { name: 'Unranked book actions' });
+    const button = within(actions).getByRole('button', { name: 'Clear all' });
+    expect(gallery).not.toContainElement(button);
+    expect(actions.nextElementSibling).toBe(gallery);
     expect(within(entry).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument();
     expect(button.parentElement).toHaveClass('gallery-toolbar');
     expect(button).toBeEnabled();
@@ -91,7 +94,7 @@ describe('book list UI', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({ ...board, books: [board.books[1]], gallery: [] });
     app.unmount();
     render(<App />);
-    expect(within(screen.getByRole('region', { name: 'Your books' })).getByRole('button', { name: 'Clear all' })).toBeDisabled();
+    expect(within(screen.getByRole('group', { name: 'Unranked book actions' })).getByRole('button', { name: 'Clear all' })).toBeDisabled();
     expect(screen.getByText('1 of 1 books ranked')).toBeVisible();
     expect(within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' })).toBeVisible();
   });

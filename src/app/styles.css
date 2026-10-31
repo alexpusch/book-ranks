@@ -409,7 +409,9 @@ main {
 
 .gallery-toolbar {
   display: flex;
-  margin-bottom: 8px;
+  padding: 0 12px 8px;
+  border-inline: 1px solid var(--line);
+  background: var(--panel);
 }
 
 .ranking-hint {
@@ -1294,6 +1296,10 @@ main {
 
   .gallery-section {
     padding: 0 18px 18px;
+  }
+
+  .gallery-toolbar {
+    padding-inline: 18px;
   }
 
   .structured-fields {
