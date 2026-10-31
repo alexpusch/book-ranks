@@ -6,6 +6,12 @@ A browser-based book tier list app. Add books, choose covers from Open Library, 
 
 [Try it live](https://alexpusch.github.io/book-ranks/).
 
+## Search discovery
+
+The app targets book tier list maker and book ranking searches with page and social metadata and structured data, without adding a visible SEO footer. After deployment, submit [the sitemap](https://alexpusch.github.io/book-ranks/sitemap.xml) in Google Search Console for the live URL to help discovery; indexing and search rankings are not guaranteed.
+
+If moving the site, update the canonical URL, Open Graph URL, and structured-data URL in [index.html](./index.html) and the URL in [public/sitemap.xml](./public/sitemap.xml). GitHub Pages project sites cannot set the host-root `robots.txt` from this repository.
+
 ## Run locally
 
 Requires Node.js 22.12+ and npm.
