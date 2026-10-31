@@ -79,7 +79,7 @@ test('theme toggle styles the page and dialogs and produces matching JPEG pixels
       const context = canvas.getContext('2d');
       if (!context) throw new Error('Canvas is unavailable.');
       context.drawImage(image, 0, 0);
-      const scale = image.naturalWidth / 1100;
+      const scale = image.naturalWidth / 1150;
       return [[2, 2], [800, 50], [40, 50]].map(([x, y]) =>
         Array.from(context.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data).slice(0, 3));
     }, (await readFile(file)).toString('base64'));

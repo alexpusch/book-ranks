@@ -150,10 +150,12 @@ test('AI imports an entire 50-book library into the gallery before cover lookup 
   await page.route('**/test-ai-library', async (route) => {
     const input = route.request().postData()!;
     inputs.push(input);
-    await route.fulfill({ json: {
-      books: [...input.matchAll(/^(Library Book \d+)\nBy: (Author \d+)$/gmu)]
-        .map((match) => ({ title: match[1], author: match[2] })),
-    } });
+    await route.fulfill({
+      json: {
+        books: [...input.matchAll(/^(Library Book \d+)\nBy: (Author \d+)$/gmu)]
+          .map((match) => ({ title: match[1], author: match[2] })),
+      }
+    });
   });
   await page.addInitScript(() => {
     Object.defineProperty(window, 'LanguageModel', {
@@ -161,7 +163,7 @@ test('AI imports an entire 50-book library into the gallery before cover lookup 
         availability: async () => 'available',
         create: async () => ({
           prompt: async (input: string) => (await fetch('/test-ai-library', { method: 'POST', body: input })).text(),
-          destroy() {},
+          destroy() { },
         }),
       },
     });
@@ -322,16 +324,20 @@ test('Safari manual entry automatically matches covers without Chrome AI', async
     Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 Version/18.0 Safari/605.1.15' });
     Object.defineProperty(window, 'LanguageModel', { configurable: true, value: undefined });
   });
-  await page.route('https://openlibrary.org/search.json?**', (route) => route.fulfill({ json: {
-    docs: [{ key: '/works/OL123W', title: 'Hyperion', author_name: ['Dan Simmons'], cover_i: 123 }],
-  } }));
-  await page.route('https://openlibrary.org/works/OL123W/editions.json?**', (route) => route.fulfill({ json: {
-    size: 2,
-    entries: [
-      { key: '/books/OL456M', title: 'Hyperion', publish_date: '2025-10-01', covers: [456] },
-      { key: '/books/OL789M', title: 'Hyperion', publish_date: '1989', covers: [789] },
-    ],
-  } }));
+  await page.route('https://openlibrary.org/search.json?**', (route) => route.fulfill({
+    json: {
+      docs: [{ key: '/works/OL123W', title: 'Hyperion', author_name: ['Dan Simmons'], cover_i: 123 }],
+    }
+  }));
+  await page.route('https://openlibrary.org/works/OL123W/editions.json?**', (route) => route.fulfill({
+    json: {
+      size: 2,
+      entries: [
+        { key: '/books/OL456M', title: 'Hyperion', publish_date: '2025-10-01', covers: [456] },
+        { key: '/books/OL789M', title: 'Hyperion', publish_date: '1989', covers: [789] },
+      ],
+    }
+  }));
   await page.goto('/');
   await page.getByLabel('Book name', { exact: true }).fill('Hyperion');
   await page.getByLabel('Author (optional)', { exact: true }).fill('Dan');
@@ -359,7 +365,7 @@ test('AI button spins without adding long-text cards until the entire batch is r
           const response = await fetch(`/test-ai-extraction?input=${encodeURIComponent(text)}`);
           return response.text();
         },
-        destroy() {},
+        destroy() { },
       }),
     };
   });
@@ -743,6 +749,7 @@ test('downloads a full tier-only JPEG with long labels and offscreen rows', asyn
   });
   expect(margins).toEqual({ top: 8, right: 8, bottom: 8, left: 8, footerGap: 8 });
   const dimensions = await exported.evaluate((element) => ({ width: element.scrollWidth, height: element.scrollHeight }));
+  expect(dimensions.width).toBe(1150);
   expect(dimensions.height).toBeGreaterThan(900);
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download', exact: true }).click();
@@ -777,7 +784,7 @@ test('downloads a full tier-only JPEG with long labels and offscreen rows', asyn
     }
     return { width: image.naturalWidth, height: image.naturalHeight, darkTop, darkBottom, footerPixels };
   }, bytes.toString('base64'));
-  expect(decoded.width).toBe(dimensions.width);
+  expect(decoded.width).toBe(1150);
   expect(decoded.height).toBe(dimensions.height);
   expect(decoded.darkTop).toBeGreaterThan(250);
   expect(decoded.darkBottom).toBeGreaterThan(250);
