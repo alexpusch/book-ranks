@@ -309,7 +309,7 @@ test('own-cover card matches cover dimensions on desktop and narrow screens', as
   }
 });
 
-for (const method of ['upload', 'paste'] as const) {
+for (const method of ['upload', 'paste', 'hover-paste'] as const) {
   test(`custom cover ${method} stays local, resizes, persists, and appears in the JPEG`, async ({ page, context }, testInfo) => {
     await page.goto('/');
     let board = importBooks(createBoard(), 'Custom cover | Author');
@@ -331,8 +331,12 @@ for (const method of ['upload', 'paste'] as const) {
       return canvas.toDataURL('image/png');
     });
     const card = page.getByRole('article', { name: 'Custom cover by Author', exact: true });
+    const pasteHint = await page.evaluate(() => /Mac/iu.test(navigator.platform)
+      ? 'cmd+v to paste cover image' : 'ctrl+v to paste cover image');
+    await expect(card).toHaveAttribute('title', pasteHint);
     await card.hover();
-    await card.getByRole('button', { name: 'Edit Custom cover', exact: true }).click();
+    await expect(card.getByRole('img', { name: pasteHint, exact: true })).toHaveCount(0);
+    if (method !== 'hover-paste') await card.getByRole('button', { name: 'Edit Custom cover', exact: true }).click();
     const editor = page.getByRole('dialog', { name: 'Book details', exact: true });
     if (method === 'upload') {
       const chooser = page.waitForEvent('filechooser');
@@ -344,8 +348,10 @@ for (const method of ['upload', 'paste'] as const) {
         const blob = await (await fetch(dataUrl)).blob();
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       }, png);
-      await editor.getByRole('button', { name: 'Paste image', exact: true }).click();
-      await expect(editor.getByRole('group', { name: 'Paste cover image' })).toBeFocused();
+      if (method === 'paste') {
+        await editor.getByRole('button', { name: 'Paste image', exact: true }).click();
+        await expect(editor.getByRole('group', { name: 'Paste cover image' })).toBeFocused();
+      }
       await page.keyboard.press('ControlOrMeta+V');
     }
     await expect(editor).toHaveCount(0);
@@ -362,7 +368,7 @@ for (const method of ['upload', 'paste'] as const) {
     await expect(editor.getByRole('button', { name: 'Select your uploaded cover', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('Escape');
     const downloaded = page.waitForEvent('download');
-    await page.getByRole('button', { name: /Export JPEG/ }).click();
+    await page.getByRole('button', { name: 'Download', exact: true }).click();
     const download = await downloaded;
     const file = testInfo.outputPath(`custom-${method}.jpg`);
     await download.saveAs(file);

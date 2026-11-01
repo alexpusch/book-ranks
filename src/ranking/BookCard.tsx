@@ -11,7 +11,8 @@ interface BookCardProps {
 }
 
 export function BookCard({ book, location, onRemove }: BookCardProps) {
-  const { states, choose, review, retry } = useBooks();
+  const { states, choose, review, retry, hover } = useBooks();
+  const pasteHint = `${/Mac/iu.test(navigator.platform) ? 'cmd' : 'ctrl'}+v to paste cover image`;
   const state = states[book.id];
   const multipleMatches = state?.outcome === 'needs-review' && state.works.length > 1 && !book.coverSelection;
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
@@ -22,6 +23,9 @@ export function BookCard({ book, location, onRemove }: BookCardProps) {
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       data-book-id={book.id}
+      onPointerEnter={(event) => { if (event.pointerType !== 'touch') hover(event.currentTarget); }}
+      onPointerLeave={() => hover(null)}
+      title={pasteHint}
       aria-label={book.pendingInput ?? `${book.title} by ${book.author}`}
     >
       <div className="book-content">

@@ -3,7 +3,7 @@ import type { Book } from '../board/board';
 import type { CoverSelection } from '../board/coverSelection';
 import type { LookupState } from '../bookResolution/lookupState';
 import { useEditions } from '../bookResolution/editions';
-import { readLocalCover } from './localCover';
+import { useLocalCover } from './useLocalCover';
 import { CoverGallery, CoverOption } from './CoverGallery';
 
 export function BookEditor({ book, state, onSave, onSelect, onClose }: {
@@ -16,29 +16,9 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const pasteTarget = useRef<HTMLDivElement>(null);
-  const imageController = useRef<AbortController | null>(null);
-  const [imageBusy, setImageBusy] = useState(false);
+  const { selectImage, imageBusy, imageError, setImageError } = useLocalCover();
   const [pasteReady, setPasteReady] = useState(false);
-  const [imageError, setImageError] = useState('');
-  useEffect(() => () => imageController.current?.abort(), []);
   useEffect(() => { if (pasteReady) pasteTarget.current?.focus(); }, [pasteReady]);
-  async function selectImage(file: File) {
-    if (imageController.current) return;
-    const controller = new AbortController();
-    imageController.current = controller;
-    setImageBusy(true);
-    setImageError('');
-    try {
-      const selection = await readLocalCover(file, controller.signal);
-      controller.signal.throwIfAborted();
-      onSelect(selection);
-    } catch (error) {
-      if (!controller.signal.aborted) setImageError(error instanceof Error ? error.message : 'Could not load the cover image.');
-    } finally {
-      if (!controller.signal.aborted) setImageBusy(false);
-      if (imageController.current === controller) imageController.current = null;
-    }
-  }
   const workId = book.matchedWorkId ?? (book.coverSelection?.kind === 'open-library' ? book.coverSelection.workId : undefined);
   const { editionWork, editionBusy, editionError, loadEditions } = useEditions(workId, book);
   const previousBook = useRef(book);
@@ -59,7 +39,7 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
       if (!pasteReady || imageBusy) return;
       event.preventDefault();
       const file = Array.from(event.clipboardData.files).find((file) => file.type.startsWith('image/'));
-      if (file) void selectImage(file);
+      if (file) void selectImage(file, onSelect);
       else setImageError('No image found on the clipboard. Copy an image and paste again, or upload a photo.');
     }}
     onPointerDown={(event) => { backdropPress.current = event.target === event.currentTarget && outsidePanel(event.clientX, event.clientY); }}
@@ -116,7 +96,7 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
           aria-label="Cover photo" hidden onChange={(event) => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
-            if (file) { setPasteReady(false); void selectImage(file); }
+            if (file) { setPasteReady(false); void selectImage(file, onSelect); }
           }} />
         <button type="button" className="secondary-button" disabled={imageBusy}
           onClick={() => fileInput.current?.click()}>Upload photo</button>

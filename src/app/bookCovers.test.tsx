@@ -335,6 +335,142 @@ it('reports invalid uploads without replacing the saved cover and allows selecti
   expect(screen.getByRole('button', { name: 'Upload photo' })).toBeEnabled();
 });
 
+it.each([
+  ['MacIntel', 'cmd+v to paste cover image'],
+  ['MacPPC', 'cmd+v to paste cover image'],
+  ['Win32', 'ctrl+v to paste cover image'],
+  ['Linux x86_64', 'ctrl+v to paste cover image'],
+])('shows the OS-specific paste hint on %s', (platform, hint) => {
+  vi.spyOn(navigator, 'platform', 'get').mockReturnValue(platform);
+  seed(selection);
+  const rendered = render(<App />);
+  const card = rendered.container.querySelector<HTMLElement>('[data-book-id]')!;
+  expect(card).toHaveAttribute('title', hint);
+  expect(within(card).queryByRole('img', { name: hint })).not.toBeInTheDocument();
+});
+
+it.each(['gallery', 'tier-S'])('pastes a cover directly onto the hovered card in %s and persists it', async (location) => {
+  let board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune | Frank Herbert');
+  board.books.forEach((book) => { book.coverSelection = selection; });
+  board = moveBook(board, board.books[0].id, location);
+  persist(board);
+  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+  const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
+  const rendered = render(<App />);
+  const card = rendered.container.querySelector<HTMLElement>(`[data-book-id="${board.books[0].id}"]`)!;
+  fireEvent.pointerEnter(card, { pointerType: 'mouse' });
+  const file = new File(['png'], 'pasted.png', { type: 'image/png' });
+  expect(fireEvent.paste(document.body, { clipboardData: { files: [file] } })).toBe(false);
+  await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
+  expect(read).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+  expect(saved().books[0]).toEqual({ ...board.books[0], coverSelection: cover });
+  expect(saved().books[1]).toEqual(board.books[1]);
+  expect(saved().gallery).toEqual(board.gallery);
+  expect(saved().tiers).toEqual(board.tiers);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  rendered.unmount();
+  const restored = render(<App />);
+  expect(restored.container.querySelector(`[data-book-id="${board.books[0].id}"] img`)).toHaveAttribute('src', cover.dataUrl);
+});
+
+it('leaves ordinary paste alone outside hovered cards, in editable fields, and in dialogs', async () => {
+  seed(selection);
+  const rendered = render(<App />);
+  const card = rendered.container.querySelector<HTMLElement>('[data-book-id]')!;
+  const read = vi.spyOn(localCover, 'readLocalCover');
+  const image = { clipboardData: { files: [new File(['png'], 'pasted.png', { type: 'image/png' })] } };
+  expect(fireEvent.paste(document.body, image)).toBe(true);
+  fireEvent.pointerEnter(card);
+  expect(fireEvent.paste(document.body, { clipboardData: { files: [] } })).toBe(true);
+  const input = screen.getByLabelText('Book name');
+  input.focus();
+  expect(fireEvent.paste(input, image)).toBe(true);
+  expect(fireEvent.paste(document.body, image)).toBe(true);
+  input.blur();
+  const editable = document.createElement('div');
+  editable.setAttribute('contenteditable', 'true');
+  document.body.append(editable);
+  expect(fireEvent.paste(editable, image)).toBe(true);
+  editable.remove();
+  card.classList.add('is-dragging');
+  expect(fireEvent.paste(document.body, image)).toBe(true);
+  card.classList.remove('is-dragging');
+  fireEvent.pointerLeave(card);
+  expect(fireEvent.paste(document.body, image)).toBe(true);
+  fireEvent.pointerEnter(card);
+  const dialog = await edit();
+  expect(fireEvent.paste(dialog, image)).toBe(true);
+  expect(read).not.toHaveBeenCalled();
+  expect(saved().books[0].coverSelection).toEqual(selection);
+});
+
+it('reports hovered-cover failures, blocks repeated pastes while preparing, and allows retry', async () => {
+  seed(selection);
+  const read = vi.spyOn(localCover, 'readLocalCover').mockRejectedValueOnce(new Error('This image could not be opened.'));
+  const rendered = render(<App />);
+  const card = rendered.container.querySelector<HTMLElement>('[data-book-id]')!;
+  fireEvent.pointerEnter(card);
+  const image = { clipboardData: { files: [new File(['png'], 'pasted.png', { type: 'image/png' })] } };
+  fireEvent.paste(document.body, image);
+  expect(await screen.findByRole('alert')).toHaveTextContent('This image could not be opened.');
+  expect(saved().books[0].coverSelection).toEqual(selection);
+  let resolve!: (selection: Awaited<ReturnType<typeof localCover.readLocalCover>>) => void;
+  read.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  fireEvent.paste(document.body, image);
+  fireEvent.paste(document.body, image);
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('Preparing cover image...')).toBeInTheDocument();
+  await act(async () => resolve({ kind: 'local', dataUrl: 'data:image/jpeg;base64,Y292ZXI=' }));
+  expect(saved().books[0].coverSelection?.kind).toBe('local');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+
+it('does not apply a pending pasted cover to a deleted book or a later hovered book', async () => {
+  const board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune Messiah | Frank Herbert');
+  board.books.forEach((book) => { book.coverSelection = selection; });
+  persist(board);
+  let resolve!: (selection: Awaited<ReturnType<typeof localCover.readLocalCover>>) => void;
+  vi.spyOn(localCover, 'readLocalCover').mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  const rendered = render(<App />);
+  const cards = rendered.container.querySelectorAll<HTMLElement>('[data-book-id]');
+  fireEvent.pointerEnter(cards[0]);
+  fireEvent.paste(document.body, { clipboardData: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } });
+  fireEvent.click(screen.getByRole('button', { name: /^Remove Dune$/ }));
+  fireEvent.pointerEnter(cards[1]);
+  await act(async () => resolve({ kind: 'local', dataUrl: 'data:image/jpeg;base64,Y292ZXI=' }));
+  expect(saved().books).toEqual([board.books[1]]);
+});
+
+it('preserves pasted artwork when an in-flight lookup finishes', async () => {
+  seed();
+  let resolve!: (works: WorkCandidate[]) => void;
+  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+  vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
+  const rendered = render(<App />);
+  fireEvent.pointerEnter(rendered.container.querySelector('[data-book-id]')!);
+  fireEvent.paste(document.body, { clipboardData: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } });
+  await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
+  await act(async () => resolve([work]));
+  expect(saved().books[0].coverSelection).toEqual(cover);
+});
+
+it('aborts image preparation and removes the shortcut listener on unmount', async () => {
+  seed(selection);
+  let resolve!: (selection: Awaited<ReturnType<typeof localCover.readLocalCover>>) => void;
+  const read = vi.spyOn(localCover, 'readLocalCover').mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  const rendered = render(<App />);
+  fireEvent.pointerEnter(rendered.container.querySelector('[data-book-id]')!);
+  const image = { clipboardData: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } };
+  fireEvent.paste(document.body, image);
+  const signal = read.mock.calls[0][1];
+  rendered.unmount();
+  expect(signal.aborted).toBe(true);
+  expect(fireEvent.paste(document.body, image)).toBe(true);
+  await act(async () => resolve({ kind: 'local', dataUrl: 'data:image/jpeg;base64,Y292ZXI=' }));
+  expect(saved().books[0].coverSelection).toEqual(selection);
+});
+
 it('preserves version 1 selections and validates matched work identifiers, not URLs', () => {
   const board = seed(selection);
   board.books[0].matchedWorkId = 'OL1W';
