@@ -442,27 +442,114 @@ it('opens the upload picker and applies local artwork without changing metadata 
   read.mockRestore();
 });
 
-it('only captures clipboard images after opting in and supports cancellation and retry', async () => {
+it('reads and saves a clipboard image on click without opening a paste form or requiring keyboard paste', async () => {
+  const user = userEvent.setup();
+  const file = new File(['png'], 'pasted.png', { type: 'image/png' });
+  const getType = vi.fn().mockResolvedValue(file);
+  const clipboardRead = vi.spyOn(navigator.clipboard, 'read').mockResolvedValue([
+    { types: ['text/plain'], presentationStyle: 'unspecified', getType: vi.fn() },
+    { types: ['text/html', 'image/png'], presentationStyle: 'unspecified', getType },
+  ]);
+  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+  const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
+  const board = seed(selection);
+  const rendered = render(<App />);
+  const dialog = await edit();
+  fireEvent.paste(dialog, { clipboardData: { files: [file] } });
+  expect(read).not.toHaveBeenCalled();
+  expect(clipboardRead).not.toHaveBeenCalled();
+  await user.click(within(dialog).getByRole('button', { name: 'Paste image' }));
+  expect(clipboardRead).toHaveBeenCalledOnce();
+  expect(getType).toHaveBeenCalledWith('image/png');
+  expect(read).toHaveBeenCalledWith(expect.objectContaining({ type: 'image/png' }), expect.any(AbortSignal));
+  expect(screen.queryByRole('group', { name: 'Paste cover image' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Cancel paste' })).not.toBeInTheDocument();
+  await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
+  expect(saved().tiers).toEqual(board.tiers);
+  rendered.unmount();
+  render(<App />);
+  expect(saved().books[0].coverSelection).toEqual(cover);
+  read.mockRestore();
+});
+
+it.each([
+  ['empty', 'No image found'],
+  ['text', 'No image found'],
+  ['denied', 'Allow clipboard access'],
+  ['invalid', 'Could not decode image'],
+])('reports %s clipboard content without replacing the cover and allows retry', async (failure, message) => {
+  const user = userEvent.setup();
+  const file = new File(['png'], 'pasted.png', { type: 'image/png' });
+  const item: ClipboardItem = {
+    types: ['image/png'],
+    presentationStyle: 'unspecified',
+    getType: vi.fn().mockResolvedValue(file),
+  };
+  const clipboardRead = vi.spyOn(navigator.clipboard, 'read');
+  if (failure === 'denied') clipboardRead.mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'));
+  else if (failure === 'text') clipboardRead.mockResolvedValueOnce([{ ...item, types: ['text/plain'] }]);
+  else clipboardRead.mockResolvedValueOnce(failure === 'empty' ? [] : [item]);
+  clipboardRead.mockResolvedValue([item]);
+  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+  const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
+  if (failure === 'invalid') read.mockRejectedValueOnce(new Error('Could not decode image'));
   seed(selection);
   render(<App />);
   const dialog = await edit();
-  const file = new File(['png'], 'pasted.png', { type: 'image/png' });
-  const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue({
-    kind: 'local',
-    dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
-  });
-  fireEvent.paste(dialog, { clipboardData: { files: [file] } });
+  await user.click(within(dialog).getByRole('button', { name: 'Paste image' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(message);
+  expect(saved().books[0].coverSelection).toEqual(selection);
+  expect(within(dialog).getByRole('button', { name: 'Upload photo' })).toBeEnabled();
+  await user.click(within(dialog).getByRole('button', { name: 'Paste image' }));
+  await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
+  read.mockRestore();
+});
+
+it('offers upload when clipboard image reading is unsupported', async () => {
+  const user = userEvent.setup();
+  const clipboardRead = vi.spyOn(navigator.clipboard, 'read');
+  Object.defineProperty(navigator.clipboard, 'read', { configurable: true, value: undefined });
+  seed(selection);
+  render(<App />);
+  const dialog = await edit();
+  await user.click(within(dialog).getByRole('button', { name: 'Paste image' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('not supported in this browser. Upload a photo instead.');
+  expect(within(dialog).getByRole('button', { name: 'Upload photo' })).toBeEnabled();
+  expect(saved().books[0].coverSelection).toEqual(selection);
+  clipboardRead.mockRestore();
+});
+
+it('disables image actions during clipboard reading and ignores the result after closing the editor', async () => {
+  const user = userEvent.setup();
+  let finish!: (items: ClipboardItem[]) => void;
+  const clipboardRead = vi.spyOn(navigator.clipboard, 'read').mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const read = vi.spyOn(localCover, 'readLocalCover');
+  seed(selection);
+  render(<App />);
+  const dialog = await edit();
+  const paste = within(dialog).getByRole('button', { name: 'Paste image' });
+  await user.click(paste);
+  expect(paste).toBeDisabled();
+  expect(within(dialog).getByRole('button', { name: 'Upload photo' })).toBeDisabled();
+  await user.click(paste);
+  expect(clipboardRead).toHaveBeenCalledOnce();
+  await user.click(within(dialog).getByRole('button', { name: 'Close book editor' }));
+  await act(async () =>
+    finish([
+      {
+        types: ['image/png'],
+        presentationStyle: 'unspecified',
+        getType: async () => new Blob(['png'], { type: 'image/png' }),
+      },
+    ]),
+  );
   expect(read).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole('button', { name: 'Paste image' }));
-  expect(screen.getByRole('group', { name: 'Paste cover image' })).toHaveFocus();
-  fireEvent.paste(dialog, { clipboardData: { files: [] } });
-  expect(screen.getByRole('alert')).toHaveTextContent('No image found');
-  await userEvent.click(screen.getByRole('button', { name: 'Cancel paste' }));
-  fireEvent.paste(dialog, { clipboardData: { files: [file] } });
-  expect(read).not.toHaveBeenCalled();
-  await userEvent.click(screen.getByRole('button', { name: 'Paste image' }));
-  fireEvent.paste(dialog, { clipboardData: { files: [file] } });
-  await waitFor(() => expect(saved().books[0].coverSelection?.kind).toBe('local'));
+  expect(saved().books[0].coverSelection).toEqual(selection);
   read.mockRestore();
 });
 

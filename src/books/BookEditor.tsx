@@ -24,12 +24,7 @@ export function BookEditor({
   const [author, setAuthor] = useState(book.author);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const pasteTarget = useRef<HTMLDivElement>(null);
-  const { selectImage, imageBusy, imageError, setImageError } = useLocalCover();
-  const [pasteReady, setPasteReady] = useState(false);
-  useEffect(() => {
-    if (pasteReady) pasteTarget.current?.focus();
-  }, [pasteReady]);
+  const { selectImage, pasteImage, imageBusy, imageError } = useLocalCover();
   const workId =
     book.matchedWorkId ?? (book.coverSelection?.kind === 'open-library' ? book.coverSelection.workId : undefined);
   const { editionWork, editionBusy, editionError, loadEditions } = useEditions(workId, book);
@@ -56,13 +51,6 @@ export function BookEditor({
       ref={dialog}
       onCancel={onClose}
       aria-label="Book details"
-      onPaste={(event) => {
-        if (!pasteReady || imageBusy) return;
-        event.preventDefault();
-        const file = Array.from(event.clipboardData.files).find((file) => file.type.startsWith('image/'));
-        if (file) void selectImage(file, onSelect);
-        else setImageError('No image found on the clipboard. Copy an image and paste again, or upload a photo.');
-      }}
       onPointerDown={(event) => {
         backdropPress.current = event.target === event.currentTarget && outsidePanel(event.clientX, event.clientY);
       }}
@@ -199,10 +187,7 @@ export function BookEditor({
             onChange={(event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = '';
-              if (file) {
-                setPasteReady(false);
-                void selectImage(file, onSelect);
-              }
+              if (file) void selectImage(file, onSelect);
             }}
           />
           <button
@@ -217,25 +202,13 @@ export function BookEditor({
             type="button"
             className="secondary-button"
             disabled={imageBusy}
-            aria-pressed={pasteReady}
-            onClick={() => {
-              setImageError('');
-              setPasteReady(true);
-            }}
+            onClick={() => void pasteImage(onSelect)}
           >
             Paste image
           </button>
           <span>Images stay in this browser.</span>
         </div>
       </div>
-      {pasteReady && (
-        <div className="cover-paste-target" ref={pasteTarget} tabIndex={0} role="group" aria-label="Paste cover image">
-          <p role="status">Press Ctrl+V (Command+V on Mac) to paste a copied image.</p>
-          <button type="button" className="secondary-button" disabled={imageBusy} onClick={() => setPasteReady(false)}>
-            Cancel paste
-          </button>
-        </div>
-      )}
       {imageBusy && <p role="status">Preparing cover image...</p>}
       {imageError && (
         <p className="field-error" role="alert">

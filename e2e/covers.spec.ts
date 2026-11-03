@@ -515,9 +515,9 @@ for (const method of ['upload', 'paste', 'hover-paste'] as const) {
       }, png);
       if (method === 'paste') {
         await editor.getByRole('button', { name: 'Paste image', exact: true }).click();
-        await expect(editor.getByRole('group', { name: 'Paste cover image' })).toBeFocused();
+      } else {
+        await page.keyboard.press('ControlOrMeta+V');
       }
-      await page.keyboard.press('ControlOrMeta+V');
     }
     await expect(editor).toHaveCount(0);
     await expect(card.locator('img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);

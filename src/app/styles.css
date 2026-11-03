@@ -1234,12 +1234,6 @@ main {
   white-space: nowrap;
 }
 
-.cover-paste-target {
-  padding: 12px;
-  border: 1px dashed var(--green);
-  border-radius: 4px;
-}
-
 .cover-options .cover-choice {
   display: block;
   width: 100%;
