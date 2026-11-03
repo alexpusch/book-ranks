@@ -10,25 +10,47 @@ import * as localCover from '../books/localCover';
 import placeholder from '../books/assets/cover.svg';
 
 vi.mock('../integrations/openLibrary/client', () => ({
-  openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
+  openLibraryClient: {
+    search: vi.fn(),
+    searchPage: vi.fn(),
+    editions: vi.fn(),
+  },
 }));
 const search = vi.mocked(openLibraryClient.search);
 const editions = vi.mocked(openLibraryClient.editions);
-const selection = { kind: 'open-library' as const, workId: 'OL1W', coverId: 123, editionId: 'OL1M' };
+const selection = {
+  kind: 'open-library' as const,
+  workId: 'OL1W',
+  coverId: 123,
+  editionId: 'OL1M',
+};
 const work: WorkCandidate = {
-  id: 'OL1W', title: 'Dune', authors: ['Frank Herbert'], covers: [{ coverId: 123 }], editions: [], nextCursor: '0',
+  id: 'OL1W',
+  title: 'Dune',
+  authors: ['Frank Herbert'],
+  covers: [{ coverId: 123 }],
+  editions: [],
+  nextCursor: '0',
 };
 const edition = {
-  id: 'OL1M', title: 'Dune', covers: [{ coverId: 456, editionId: 'OL1M' }],
-  languages: ['eng'], publishers: ['Publisher'], isbns: [], publicationDate: '2025',
+  id: 'OL1M',
+  title: 'Dune',
+  covers: [{ coverId: 456, editionId: 'OL1M' }],
+  languages: ['eng'],
+  publishers: ['Publisher'],
+  isbns: [],
+  publicationDate: '2025',
 };
 beforeEach(() => {
   window.history.replaceState(null, '', '/?ai=true');
   localStorage.clear();
   search.mockReset().mockResolvedValue([]);
-  vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
-    works: await search(input, signal), nextCursor: null,
-  }));
+  vi.mocked(openLibraryClient.searchPage)
+    .mockReset()
+    .mockImplementation(async (input, signal) => ({
+      works: await search(input, signal),
+      nextCursor: null,
+    }));
   editions.mockReset().mockResolvedValue({ editions: [edition], nextCursor: null });
 });
 function persist(board: Board) {
@@ -50,8 +72,12 @@ async function edit() {
 }
 
 const otherWork: WorkCandidate = {
-  id: 'OL2W', title: 'Dune Messiah', authors: ['Frank Herbert'], covers: [{ coverId: 789 }],
-  editions: [], nextCursor: '0',
+  id: 'OL2W',
+  title: 'Dune Messiah',
+  authors: ['Frank Herbert'],
+  covers: [{ coverId: 789 }],
+  editions: [],
+  nextCursor: '0',
 };
 const ambiguousWork = { ...work, authors: ['F. Herbert'] };
 
@@ -67,10 +93,14 @@ it.each(['Manual entry', 'Bulk insert'])('automatically selects an exact title a
     await userEvent.type(screen.getByLabelText(/Author/), 'fRaNk HeRbErT');
   }
   await userEvent.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
-  await waitFor(() => expect(saved().books[0]).toMatchObject({
-    title: 'Dune', author: 'Frank Herbert', matchedWorkId: 'OL1W',
-    coverSelection: { kind: 'open-library', workId: 'OL1W', coverId: 123 },
-  }));
+  await waitFor(() =>
+    expect(saved().books[0]).toMatchObject({
+      title: 'Dune',
+      author: 'Frank Herbert',
+      matchedWorkId: 'OL1W',
+      coverSelection: { kind: 'open-library', workId: 'OL1W', coverId: 123 },
+    }),
+  );
   expect(screen.queryByText('Multiple matches')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Drag Dune' })).toBeInTheDocument();
   expect(editions).not.toHaveBeenCalled();
@@ -86,41 +116,78 @@ it('appends more matches, deduplicates work IDs, and pages the submitted query r
   seed();
   const thirdWork = { ...work, id: 'OL3W', title: 'Children of Dune' };
   const page = vi.mocked(openLibraryClient.searchPage);
-  page.mockResolvedValueOnce({ works: [ambiguousWork, otherWork], nextCursor: '10' })
-    .mockResolvedValueOnce({ works: [otherWork, thirdWork, thirdWork], nextCursor: '20' })
+  page
+    .mockResolvedValueOnce({
+      works: [ambiguousWork, otherWork],
+      nextCursor: '10',
+    })
+    .mockResolvedValueOnce({
+      works: [otherWork, thirdWork, thirdWork],
+      nextCursor: '20',
+    })
     .mockResolvedValueOnce({ works: [], nextCursor: null });
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
   const dialog = screen.getByRole('dialog');
-  const gallery = within(dialog).getByRole('group', { name: 'Book match gallery' });
+  const gallery = within(dialog).getByRole('group', {
+    name: 'Book match gallery',
+  });
   expect(page).toHaveBeenCalledOnce();
   await userEvent.type(within(dialog).getByLabelText('Book title'), ' draft');
   await userEvent.clear(within(dialog).getByLabelText('Author'));
   await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
-  expect(page).toHaveBeenLastCalledWith({
-    title: 'Dune', author: 'Frank Herbert', cursor: '10',
-  }, expect.any(AbortSignal));
-  expect(await within(gallery).findByRole('button', { name: 'Select Children of Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(page).toHaveBeenLastCalledWith(
+    {
+      title: 'Dune',
+      author: 'Frank Herbert',
+      cursor: '10',
+    },
+    expect.any(AbortSignal),
+  );
+  expect(
+    await within(gallery).findByRole('button', {
+      name: 'Select Children of Dune by Frank Herbert',
+    }),
+  ).toBeInTheDocument();
   expect(within(gallery).getAllByRole('button')).toHaveLength(3);
   expect(gallery.querySelector(`img[src="${coverUrl(789)}"]`)).toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
-  expect(page).toHaveBeenLastCalledWith({
-    title: 'Dune', author: 'Frank Herbert', cursor: '20',
-  }, expect.any(AbortSignal));
+  expect(page).toHaveBeenLastCalledWith(
+    {
+      title: 'Dune',
+      author: 'Frank Herbert',
+      cursor: '20',
+    },
+    expect.any(AbortSignal),
+  );
   expect(await within(dialog).findByText('All matching works loaded.')).toBeInTheDocument();
   expect(within(dialog).queryByRole('button', { name: 'Show more' })).not.toBeInTheDocument();
   expect(within(gallery).getAllByRole('button')).toHaveLength(3);
-  await userEvent.click(within(gallery).getByRole('button', { name: 'Select Children of Dune by Frank Herbert' }));
-  expect(saved().books[0]).toMatchObject({ title: 'Children of Dune', matchedWorkId: 'OL3W' });
+  await userEvent.click(
+    within(gallery).getByRole('button', {
+      name: 'Select Children of Dune by Frank Herbert',
+    }),
+  );
+  expect(saved().books[0]).toMatchObject({
+    title: 'Children of Dune',
+    matchedWorkId: 'OL3W',
+  });
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
 
 it('keeps earlier matches on a pagination failure and retries the same page', async () => {
   const board = seed();
   const page = vi.mocked(openLibraryClient.searchPage);
-  page.mockResolvedValueOnce({ works: [ambiguousWork, otherWork], nextCursor: '10' })
+  page
+    .mockResolvedValueOnce({
+      works: [ambiguousWork, otherWork],
+      nextCursor: '10',
+    })
     .mockRejectedValueOnce(new Error('More results offline'))
-    .mockResolvedValueOnce({ works: [{ ...work, id: 'OL3W', title: 'Children of Dune' }], nextCursor: null });
+    .mockResolvedValueOnce({
+      works: [{ ...work, id: 'OL3W', title: 'Children of Dune' }],
+      nextCursor: null,
+    });
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
   const dialog = screen.getByRole('dialog');
@@ -128,7 +195,11 @@ it('keeps earlier matches on a pagination failure and retries the same page', as
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('More results offline');
   expect(within(dialog).getByRole('button', { name: 'Select Dune by F. Herbert' })).toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
-  expect(await within(dialog).findByRole('button', { name: 'Select Children of Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(
+    await within(dialog).findByRole('button', {
+      name: 'Select Children of Dune by Frank Herbert',
+    }),
+  ).toBeInTheDocument();
   expect(page.mock.calls[1][0].cursor).toBe('10');
   expect(page.mock.calls[2][0].cursor).toBe('10');
   expect(saved().books[0]).toEqual(board.books[0]);
@@ -138,8 +209,17 @@ it('refining a search cancels pagination, resets its cursor, and ignores its lat
   seed();
   let finish!: (works: { works: WorkCandidate[]; nextCursor: string | null }) => void;
   const page = vi.mocked(openLibraryClient.searchPage);
-  page.mockResolvedValueOnce({ works: [ambiguousWork, otherWork], nextCursor: '10' })
-    .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+  page
+    .mockResolvedValueOnce({
+      works: [ambiguousWork, otherWork],
+      nextCursor: '10',
+    })
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    )
     .mockResolvedValueOnce({ works: [otherWork], nextCursor: '10' });
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
@@ -153,50 +233,75 @@ it('refining a search cancels pagination, resets its cursor, and ignores its lat
   expect(page.mock.calls[1][1].aborted).toBe(true);
   expect(page).toHaveBeenLastCalledWith({ title: 'Dune Messiah', author: 'Frank Herbert' }, expect.any(AbortSignal));
   await act(async () => finish({ works: [work], nextCursor: '20' }));
-  expect(within(dialog).queryByRole('button', { name: 'Select Dune by Frank Herbert' })).not.toBeInTheDocument();
-  expect(within(dialog).getByRole('button', { name: 'Select Dune Messiah by Frank Herbert' })).toBeInTheDocument();
+  expect(
+    within(dialog).queryByRole('button', {
+      name: 'Select Dune by Frank Herbert',
+    }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(dialog).getByRole('button', {
+      name: 'Select Dune Messiah by Frank Herbert',
+    }),
+  ).toBeInTheDocument();
   await userEvent.click(within(dialog).getByRole('button', { name: 'Show more' }));
-  expect(page).toHaveBeenLastCalledWith({
-    title: 'Dune Messiah', author: 'Frank Herbert', cursor: '10',
-  }, expect.any(AbortSignal));
+  expect(page).toHaveBeenLastCalledWith(
+    {
+      title: 'Dune Messiah',
+      author: 'Frank Herbert',
+      cursor: '10',
+    },
+    expect.any(AbortSignal),
+  );
 });
 
-it.each(['available', 'unavailable'] as const)('reviews multiple manual matches with Chrome AI %s, then persists the selected book', async (availability) => {
-  vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
-  const board = seed();
-  search.mockResolvedValueOnce([ambiguousWork, otherWork]);
-  const rendered = render(<App />);
-  const label = await screen.findByText('Multiple matches');
-  const card = label.closest('article')!;
-  expect(within(card).getAllByRole('button')).toHaveLength(2);
-  expect(within(card).queryByRole('button', { name: 'Drag Dune' })).not.toBeInTheDocument();
-  expect(within(card).queryByRole('button', { name: 'Edit Dune' })).not.toBeInTheDocument();
-  expect(saved().books[0]).toEqual(board.books[0]);
-  expect(editions).not.toHaveBeenCalled();
-  expect(window.LanguageModel!.create).not.toHaveBeenCalled();
-  await userEvent.click(within(card).getByRole('button', { name: 'Review Dune' }));
-  const dialog = screen.getByRole('dialog', { name: 'Review book matches' });
-  expect(within(dialog).getByLabelText('Book title')).toHaveValue('Dune');
-  expect(within(dialog).getByLabelText('Author')).toHaveValue('Frank Herbert');
-  const gallery = within(dialog).getByRole('group', { name: 'Book match gallery' });
-  expect(gallery.querySelector(`img[src="${coverUrl(123)}"]`)).toBeInTheDocument();
-  expect(gallery.querySelector(`img[src="${coverUrl(789)}"]`)).toBeInTheDocument();
-  await userEvent.click(within(gallery).getByRole('button', { name: 'Select Dune Messiah by Frank Herbert' }));
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  expect(screen.queryByText('Multiple matches')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Drag Dune Messiah' })).toBeInTheDocument();
-  expect(saved().books[0]).toMatchObject({
-    id: board.books[0].id, title: 'Dune Messiah', author: 'Frank Herbert', matchedWorkId: 'OL2W',
-    coverSelection: { kind: 'open-library', workId: 'OL2W', coverId: 789 },
-  });
-  expect(saved().tiers).toEqual(board.tiers);
-  expect(saved().gallery).toEqual(board.gallery);
-  rendered.unmount();
-  search.mockClear();
-  render(<App />);
-  expect(screen.getByRole('button', { name: 'Edit Dune Messiah' })).toBeInTheDocument();
-  expect(search).not.toHaveBeenCalled();
-});
+it.each(['available', 'unavailable'] as const)(
+  'reviews multiple manual matches with Chrome AI %s, then persists the selected book',
+  async (availability) => {
+    vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
+    const board = seed();
+    search.mockResolvedValueOnce([ambiguousWork, otherWork]);
+    const rendered = render(<App />);
+    const label = await screen.findByText('Multiple matches');
+    const card = label.closest('article')!;
+    expect(within(card).getAllByRole('button')).toHaveLength(2);
+    expect(within(card).queryByRole('button', { name: 'Drag Dune' })).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Edit Dune' })).not.toBeInTheDocument();
+    expect(saved().books[0]).toEqual(board.books[0]);
+    expect(editions).not.toHaveBeenCalled();
+    expect(window.LanguageModel!.create).not.toHaveBeenCalled();
+    await userEvent.click(within(card).getByRole('button', { name: 'Review Dune' }));
+    const dialog = screen.getByRole('dialog', { name: 'Review book matches' });
+    expect(within(dialog).getByLabelText('Book title')).toHaveValue('Dune');
+    expect(within(dialog).getByLabelText('Author')).toHaveValue('Frank Herbert');
+    const gallery = within(dialog).getByRole('group', {
+      name: 'Book match gallery',
+    });
+    expect(gallery.querySelector(`img[src="${coverUrl(123)}"]`)).toBeInTheDocument();
+    expect(gallery.querySelector(`img[src="${coverUrl(789)}"]`)).toBeInTheDocument();
+    await userEvent.click(
+      within(gallery).getByRole('button', {
+        name: 'Select Dune Messiah by Frank Herbert',
+      }),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.queryByText('Multiple matches')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Drag Dune Messiah' })).toBeInTheDocument();
+    expect(saved().books[0]).toMatchObject({
+      id: board.books[0].id,
+      title: 'Dune Messiah',
+      author: 'Frank Herbert',
+      matchedWorkId: 'OL2W',
+      coverSelection: { kind: 'open-library', workId: 'OL2W', coverId: 789 },
+    });
+    expect(saved().tiers).toEqual(board.tiers);
+    expect(saved().gallery).toEqual(board.gallery);
+    rendered.unmount();
+    search.mockClear();
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Edit Dune Messiah' })).toBeInTheDocument();
+    expect(search).not.toHaveBeenCalled();
+  },
+);
 
 it('refines review searches without changing the book until choosing a result, including results without covers', async () => {
   const board = seed();
@@ -209,8 +314,14 @@ it('refines review searches without changing the book until choosing a result, i
   await userEvent.clear(within(dialog).getByLabelText('Author'));
   await userEvent.click(within(dialog).getByRole('button', { name: 'Search' }));
   expect(search).toHaveBeenLastCalledWith({ title: 'Dune Messiah', author: undefined }, expect.any(AbortSignal));
-  const option = await within(dialog).findByRole('button', { name: 'Select Dune Messiah by Frank Herbert' });
-  expect(within(dialog).queryByRole('button', { name: 'Select Dune by Frank Herbert' })).not.toBeInTheDocument();
+  const option = await within(dialog).findByRole('button', {
+    name: 'Select Dune Messiah by Frank Herbert',
+  });
+  expect(
+    within(dialog).queryByRole('button', {
+      name: 'Select Dune by Frank Herbert',
+    }),
+  ).not.toBeInTheDocument();
   expect(saved().books[0]).toEqual(board.books[0]);
   await userEvent.click(option);
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -221,8 +332,11 @@ it('refines review searches without changing the book until choosing a result, i
 
 it('shows empty results and search errors in review and allows retry', async () => {
   const board = seed();
-  search.mockResolvedValueOnce([ambiguousWork, otherWork]).mockResolvedValueOnce([])
-    .mockRejectedValueOnce(new Error('Open Library offline')).mockResolvedValueOnce([work]);
+  search
+    .mockResolvedValueOnce([ambiguousWork, otherWork])
+    .mockResolvedValueOnce([])
+    .mockRejectedValueOnce(new Error('Open Library offline'))
+    .mockResolvedValueOnce([work]);
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
   const dialog = screen.getByRole('dialog');
@@ -232,7 +346,11 @@ it('shows empty results and search errors in review and allows retry', async () 
   await userEvent.click(button);
   expect(await within(dialog).findByRole('alert')).toHaveTextContent('Open Library offline');
   await userEvent.click(button);
-  expect(await within(dialog).findByRole('button', { name: 'Select Dune by Frank Herbert' })).toBeInTheDocument();
+  expect(
+    await within(dialog).findByRole('button', {
+      name: 'Select Dune by Frank Herbert',
+    }),
+  ).toBeInTheDocument();
   expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   expect(saved().books[0]).toEqual(board.books[0]);
 });
@@ -241,9 +359,20 @@ it('cancels replaced review searches and closing the reviewer ignores late resul
   const board = seed();
   let finishFirst!: (works: WorkCandidate[]) => void;
   let finishSecond!: (works: WorkCandidate[]) => void;
-  search.mockResolvedValueOnce([ambiguousWork, otherWork])
-    .mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve; }))
-    .mockImplementationOnce(() => new Promise((resolve) => { finishSecond = resolve; }));
+  search
+    .mockResolvedValueOnce([ambiguousWork, otherWork])
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishFirst = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSecond = resolve;
+        }),
+    );
   render(<App />);
   await userEvent.click(await screen.findByRole('button', { name: 'Review Dune' }));
   const button = screen.getByRole('button', { name: 'Search' });
@@ -276,8 +405,16 @@ it('removes unresolved multiple-match books from the gallery', async () => {
 it('opens the upload picker and applies local artwork without changing metadata or placements', async () => {
   const board = seed();
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
-  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const cover = {
+    kind: 'local' as const,
+    dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
+  };
   const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
   const rendered = render(<App />);
   const dialog = await edit();
@@ -285,10 +422,16 @@ it('opens the upload picker and applies local artwork without changing metadata 
   const click = vi.spyOn(input, 'click');
   await userEvent.click(within(dialog).getByRole('button', { name: 'Upload photo' }));
   expect(click).toHaveBeenCalledOnce();
-  fireEvent.change(input, { target: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } });
+  fireEvent.change(input, {
+    target: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] },
+  });
   await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   await act(async () => resolve([work]));
-  expect(saved().books[0]).toMatchObject({ title: 'Dune', author: 'Frank Herbert', coverSelection: cover });
+  expect(saved().books[0]).toMatchObject({
+    title: 'Dune',
+    author: 'Frank Herbert',
+    coverSelection: cover,
+  });
   expect(saved().tiers).toEqual(board.tiers);
   rendered.unmount();
   search.mockClear();
@@ -305,7 +448,8 @@ it('only captures clipboard images after opting in and supports cancellation and
   const dialog = await edit();
   const file = new File(['png'], 'pasted.png', { type: 'image/png' });
   const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue({
-    kind: 'local', dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
+    kind: 'local',
+    dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
   });
   fireEvent.paste(dialog, { clipboardData: { files: [file] } });
   expect(read).not.toHaveBeenCalled();
@@ -349,36 +493,54 @@ it.each([
   expect(within(card).queryByRole('img', { name: hint })).not.toBeInTheDocument();
 });
 
-it.each(['gallery', 'tier-S'])('pastes a cover directly onto the hovered card in %s and persists it', async (location) => {
-  let board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune | Frank Herbert');
-  board.books.forEach((book) => { book.coverSelection = selection; });
-  board = moveBook(board, board.books[0].id, location);
-  persist(board);
-  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
-  const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
-  const rendered = render(<App />);
-  const card = rendered.container.querySelector<HTMLElement>(`[data-book-id="${board.books[0].id}"]`)!;
-  fireEvent.pointerEnter(card, { pointerType: 'mouse' });
-  const file = new File(['png'], 'pasted.png', { type: 'image/png' });
-  expect(fireEvent.paste(document.body, { clipboardData: { files: [file] } })).toBe(false);
-  await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
-  expect(read).toHaveBeenCalledWith(file, expect.any(AbortSignal));
-  expect(saved().books[0]).toEqual({ ...board.books[0], coverSelection: cover });
-  expect(saved().books[1]).toEqual(board.books[1]);
-  expect(saved().gallery).toEqual(board.gallery);
-  expect(saved().tiers).toEqual(board.tiers);
-  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-  rendered.unmount();
-  const restored = render(<App />);
-  expect(restored.container.querySelector(`[data-book-id="${board.books[0].id}"] img`)).toHaveAttribute('src', cover.dataUrl);
-});
+it.each(['gallery', 'tier-S'])(
+  'pastes a cover directly onto the hovered card in %s and persists it',
+  async (location) => {
+    let board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune | Frank Herbert');
+    board.books.forEach((book) => {
+      book.coverSelection = selection;
+    });
+    board = moveBook(board, board.books[0].id, location);
+    persist(board);
+    const cover = {
+      kind: 'local' as const,
+      dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
+    };
+    const read = vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
+    const rendered = render(<App />);
+    const card = rendered.container.querySelector<HTMLElement>(`[data-book-id="${board.books[0].id}"]`)!;
+    fireEvent.pointerEnter(card, { pointerType: 'mouse' });
+    const file = new File(['png'], 'pasted.png', { type: 'image/png' });
+    expect(fireEvent.paste(document.body, { clipboardData: { files: [file] } })).toBe(false);
+    await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
+    expect(read).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+    expect(saved().books[0]).toEqual({
+      ...board.books[0],
+      coverSelection: cover,
+    });
+    expect(saved().books[1]).toEqual(board.books[1]);
+    expect(saved().gallery).toEqual(board.gallery);
+    expect(saved().tiers).toEqual(board.tiers);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    rendered.unmount();
+    const restored = render(<App />);
+    expect(restored.container.querySelector(`[data-book-id="${board.books[0].id}"] img`)).toHaveAttribute(
+      'src',
+      cover.dataUrl,
+    );
+  },
+);
 
 it('leaves ordinary paste alone outside hovered cards, in editable fields, and in dialogs', async () => {
   seed(selection);
   const rendered = render(<App />);
   const card = rendered.container.querySelector<HTMLElement>('[data-book-id]')!;
   const read = vi.spyOn(localCover, 'readLocalCover');
-  const image = { clipboardData: { files: [new File(['png'], 'pasted.png', { type: 'image/png' })] } };
+  const image = {
+    clipboardData: {
+      files: [new File(['png'], 'pasted.png', { type: 'image/png' })],
+    },
+  };
   expect(fireEvent.paste(document.body, image)).toBe(true);
   fireEvent.pointerEnter(card);
   expect(fireEvent.paste(document.body, { clipboardData: { files: [] } })).toBe(true);
@@ -406,16 +568,27 @@ it('leaves ordinary paste alone outside hovered cards, in editable fields, and i
 
 it('reports hovered-cover failures, blocks repeated pastes while preparing, and allows retry', async () => {
   seed(selection);
-  const read = vi.spyOn(localCover, 'readLocalCover').mockRejectedValueOnce(new Error('This image could not be opened.'));
+  const read = vi
+    .spyOn(localCover, 'readLocalCover')
+    .mockRejectedValueOnce(new Error('This image could not be opened.'));
   const rendered = render(<App />);
   const card = rendered.container.querySelector<HTMLElement>('[data-book-id]')!;
   fireEvent.pointerEnter(card);
-  const image = { clipboardData: { files: [new File(['png'], 'pasted.png', { type: 'image/png' })] } };
+  const image = {
+    clipboardData: {
+      files: [new File(['png'], 'pasted.png', { type: 'image/png' })],
+    },
+  };
   fireEvent.paste(document.body, image);
   expect(await screen.findByRole('alert')).toHaveTextContent('This image could not be opened.');
   expect(saved().books[0].coverSelection).toEqual(selection);
   let resolve!: (selection: Awaited<ReturnType<typeof localCover.readLocalCover>>) => void;
-  read.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  read.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   fireEvent.paste(document.body, image);
   fireEvent.paste(document.body, image);
   expect(read).toHaveBeenCalledTimes(2);
@@ -427,14 +600,25 @@ it('reports hovered-cover failures, blocks repeated pastes while preparing, and 
 
 it('does not apply a pending pasted cover to a deleted book or a later hovered book', async () => {
   const board = importBooks(createBoard(), 'Dune | Frank Herbert\nDune Messiah | Frank Herbert');
-  board.books.forEach((book) => { book.coverSelection = selection; });
+  board.books.forEach((book) => {
+    book.coverSelection = selection;
+  });
   persist(board);
   let resolve!: (selection: Awaited<ReturnType<typeof localCover.readLocalCover>>) => void;
-  vi.spyOn(localCover, 'readLocalCover').mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  vi.spyOn(localCover, 'readLocalCover').mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   const rendered = render(<App />);
   const cards = rendered.container.querySelectorAll<HTMLElement>('[data-book-id]');
   fireEvent.pointerEnter(cards[0]);
-  fireEvent.paste(document.body, { clipboardData: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } });
+  fireEvent.paste(document.body, {
+    clipboardData: {
+      files: [new File(['png'], 'cover.png', { type: 'image/png' })],
+    },
+  });
   fireEvent.click(screen.getByRole('button', { name: /^Remove Dune$/ }));
   fireEvent.pointerEnter(cards[1]);
   await act(async () => resolve({ kind: 'local', dataUrl: 'data:image/jpeg;base64,Y292ZXI=' }));
@@ -444,12 +628,24 @@ it('does not apply a pending pasted cover to a deleted book or a later hovered b
 it('preserves pasted artwork when an in-flight lookup finishes', async () => {
   seed();
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
-  const cover = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const cover = {
+    kind: 'local' as const,
+    dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
+  };
   vi.spyOn(localCover, 'readLocalCover').mockResolvedValue(cover);
   const rendered = render(<App />);
   fireEvent.pointerEnter(rendered.container.querySelector('[data-book-id]')!);
-  fireEvent.paste(document.body, { clipboardData: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } });
+  fireEvent.paste(document.body, {
+    clipboardData: {
+      files: [new File(['png'], 'cover.png', { type: 'image/png' })],
+    },
+  });
   await waitFor(() => expect(saved().books[0].coverSelection).toEqual(cover));
   await act(async () => resolve([work]));
   expect(saved().books[0].coverSelection).toEqual(cover);
@@ -458,10 +654,19 @@ it('preserves pasted artwork when an in-flight lookup finishes', async () => {
 it('aborts image preparation and removes the shortcut listener on unmount', async () => {
   seed(selection);
   let resolve!: (selection: Awaited<ReturnType<typeof localCover.readLocalCover>>) => void;
-  const read = vi.spyOn(localCover, 'readLocalCover').mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  const read = vi.spyOn(localCover, 'readLocalCover').mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   const rendered = render(<App />);
   fireEvent.pointerEnter(rendered.container.querySelector('[data-book-id]')!);
-  const image = { clipboardData: { files: [new File(['png'], 'cover.png', { type: 'image/png' })] } };
+  const image = {
+    clipboardData: {
+      files: [new File(['png'], 'cover.png', { type: 'image/png' })],
+    },
+  };
   fireEvent.paste(document.body, image);
   const signal = read.mock.calls[0][1];
   rendered.unmount();
@@ -475,11 +680,25 @@ it('preserves version 1 selections and validates matched work identifiers, not U
   const board = seed(selection);
   board.books[0].matchedWorkId = 'OL1W';
   expect(validateBoard(board)).toEqual(board);
-  for (const invalid of [{ ...selection, coverId: -1 }, { ...selection, workId: 'https://evil.invalid' },
-    { ...selection, editionId: 'OL1W' }, { ...selection, url: 'https://evil.invalid' }]) {
-    expect(() => validateBoard({ ...board, books: [{ ...board.books[0], coverSelection: invalid }] })).toThrow('cover selection');
+  for (const invalid of [
+    { ...selection, coverId: -1 },
+    { ...selection, workId: 'https://evil.invalid' },
+    { ...selection, editionId: 'OL1W' },
+    { ...selection, url: 'https://evil.invalid' },
+  ]) {
+    expect(() =>
+      validateBoard({
+        ...board,
+        books: [{ ...board.books[0], coverSelection: invalid }],
+      }),
+    ).toThrow('cover selection');
   }
-  expect(() => validateBoard({ ...board, books: [{ ...board.books[0], matchedWorkId: 'https://evil.invalid' }] })).toThrow('matched work');
+  expect(() =>
+    validateBoard({
+      ...board,
+      books: [{ ...board.books[0], matchedWorkId: 'https://evil.invalid' }],
+    }),
+  ).toThrow('matched work');
 });
 
 it('renders persisted artwork without metadata lookup, including when the editor opens', async () => {
@@ -490,8 +709,9 @@ it('renders persisted artwork without metadata lookup, including when the editor
   await userEvent.click(screen.getByRole('button', { name: 'Retry image' }));
   expect(screen.queryByText(/Artwork unavailable/)).not.toBeInTheDocument();
   const dialog = await edit();
-  expect(within(dialog).getByRole('group', { name: 'Cover gallery' }).lastElementChild)
-    .toHaveTextContent('Your own cover');
+  expect(within(dialog).getByRole('group', { name: 'Cover gallery' }).lastElementChild).toHaveTextContent(
+    'Your own cover',
+  );
   expect(within(dialog).getByRole('button', { name: /Select edition OL1M/ })).toHaveAttribute('aria-pressed', 'true');
   expect(search).not.toHaveBeenCalled();
   expect(editions).not.toHaveBeenCalled();
@@ -499,12 +719,22 @@ it('renders persisted artwork without metadata lookup, including when the editor
 
 it('applies only search-result metadata and representative artwork without fetching editions or looping', async () => {
   const board = seed();
-  search.mockResolvedValueOnce([{ ...work, title: 'Dune: The Novel', authors: ['Frank Herbert', 'Other Author'] }]);
+  search.mockResolvedValueOnce([
+    {
+      ...work,
+      title: 'Dune: The Novel',
+      authors: ['Frank Herbert', 'Other Author'],
+    },
+  ]);
   render(<App />);
-  await waitFor(() => expect(saved().books[0]).toMatchObject({
-    title: 'Dune: The Novel', author: 'Frank Herbert, Other Author', matchedWorkId: 'OL1W',
-    coverSelection: { kind: 'open-library', workId: 'OL1W', coverId: 123 },
-  }));
+  await waitFor(() =>
+    expect(saved().books[0]).toMatchObject({
+      title: 'Dune: The Novel',
+      author: 'Frank Herbert, Other Author',
+      matchedWorkId: 'OL1W',
+      coverSelection: { kind: 'open-library', workId: 'OL1W', coverId: 123 },
+    }),
+  );
   expect(saved().tiers).toEqual(board.tiers);
   expect(search).toHaveBeenCalledOnce();
   expect(editions).not.toHaveBeenCalled();
@@ -528,7 +758,8 @@ it('shows a placeholder without a review label when Chrome AI returns no suitabl
   seed();
   search.mockResolvedValueOnce([ambiguousWork]);
   vi.mocked(window.LanguageModel!.create).mockResolvedValueOnce({
-    prompt: vi.fn().mockResolvedValue('{"workId":null}'), destroy: vi.fn(),
+    prompt: vi.fn().mockResolvedValue('{"workId":null}'),
+    destroy: vi.fn(),
   });
   render(<App />);
   await edit();
@@ -569,33 +800,56 @@ it('applies duplicate canonical metadata without merging placements or corruptin
 
 it('loads editions only on an explicit click and subsequent pages only on another click', async () => {
   seed(selection);
-  editions.mockResolvedValueOnce({ editions: [edition], nextCursor: '20' })
-    .mockResolvedValueOnce({ editions: [{ ...edition, id: 'OL2M', covers: [{ coverId: 789 }] }], nextCursor: null });
+  editions.mockResolvedValueOnce({ editions: [edition], nextCursor: '20' }).mockResolvedValueOnce({
+    editions: [{ ...edition, id: 'OL2M', covers: [{ coverId: 789 }] }],
+    nextCursor: null,
+  });
   render(<App />);
   const dialog = await edit();
   expect(editions).not.toHaveBeenCalled();
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Find additional editions and covers' }));
-  const tile = await screen.findByRole('button', { name: /Select edition OL1M.*2025/ });
+  await userEvent.click(
+    within(dialog).getByRole('button', {
+      name: 'Find additional editions and covers',
+    }),
+  );
+  const tile = await screen.findByRole('button', {
+    name: /Select edition OL1M.*2025/,
+  });
   expect(tile.parentElement).toHaveTextContent('2025');
   expect(editions).toHaveBeenCalledExactlyOnceWith({ workId: 'OL1W', cursor: '0' }, expect.any(AbortSignal));
   await userEvent.click(screen.getByRole('button', { name: 'More editions and covers' }));
   expect(await screen.findByText('All available editions loaded.')).toBeInTheDocument();
   expect(editions).toHaveBeenLastCalledWith({ workId: 'OL1W', cursor: '20' }, expect.any(AbortSignal));
   await userEvent.click(tile);
-  expect(saved().books[0].coverSelection).toEqual({ ...selection, coverId: 456 });
-  expect(saved().books[0]).toMatchObject({ title: 'Dune', author: 'Frank Herbert' });
+  expect(saved().books[0].coverSelection).toEqual({
+    ...selection,
+    coverId: 456,
+  });
+  expect(saved().books[0]).toMatchObject({
+    title: 'Dune',
+    author: 'Frank Herbert',
+  });
 });
 
 it('deduplicates edition artwork while retaining a saved association and its release date', async () => {
   seed(selection);
   editions.mockResolvedValueOnce({
-    editions: [{ ...edition, covers: [{ coverId: 123 }] }, { ...edition, id: 'OL2M', covers: [{ coverId: 123 }] }],
+    editions: [
+      { ...edition, covers: [{ coverId: 123 }] },
+      { ...edition, id: 'OL2M', covers: [{ coverId: 123 }] },
+    ],
     nextCursor: null,
   });
   render(<App />);
   const dialog = await edit();
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Find additional editions and covers' }));
-  const tile = await screen.findByRole('button', { name: /Select edition OL1M.*2025/ });
+  await userEvent.click(
+    within(dialog).getByRole('button', {
+      name: 'Find additional editions and covers',
+    }),
+  );
+  const tile = await screen.findByRole('button', {
+    name: /Select edition OL1M.*2025/,
+  });
   expect(tile).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('group', { name: 'Cover gallery' }).querySelectorAll('img')).toHaveLength(2);
 });
@@ -626,10 +880,17 @@ it('cancels an edition request when the editor closes', async () => {
 it('keeps an explicit placeholder chosen while a lookup is active', async () => {
   seed();
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   render(<App />);
   const dialog = await edit();
-  const placeholder = within(dialog).getByRole('button', { name: 'Select placeholder cover' });
+  const placeholder = within(dialog).getByRole('button', {
+    name: 'Select placeholder cover',
+  });
   placeholder.focus();
   await userEvent.keyboard('{Enter}');
   await act(async () => resolve([work]));
@@ -640,7 +901,12 @@ it('keeps an explicit placeholder chosen while a lookup is active', async () => 
 it('ignores results after removal', async () => {
   seed();
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   render(<App />);
   await userEvent.click(screen.getByRole('button', { name: 'Remove Dune' }));
   await act(async () => resolve([work]));
@@ -650,9 +916,16 @@ it('ignores results after removal', async () => {
 it('ignores pending results when storage recovery resets the board', async () => {
   localStorage.setItem(STORAGE_KEY, 'invalid saved data');
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   render(<App />);
-  fireEvent.change(await screen.findByLabelText('Book title and author in natural language'), { target: { value: 'Dune | Frank Herbert' } });
+  fireEvent.change(await screen.findByLabelText('Book title and author in natural language'), {
+    target: { value: 'Dune | Frank Herbert' },
+  });
   await userEvent.click(screen.getByRole('button', { name: '+ Add books' }));
   await userEvent.click(screen.getByRole('button', { name: 'Reset saved data and current list' }));
   await act(async () => resolve([work]));
@@ -662,14 +935,24 @@ it('ignores pending results when storage recovery resets the board', async () =>
 it('updates clean editor fields after a match but preserves an unsaved draft', async () => {
   seed();
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   render(<App />);
   const dialog = await edit();
-  fireEvent.change(within(dialog).getByLabelText('Author'), { target: { value: 'My unsaved author' } });
+  fireEvent.change(within(dialog).getByLabelText('Author'), {
+    target: { value: 'My unsaved author' },
+  });
   await act(async () => resolve([{ ...work, title: 'Canonical Dune', authors: ['Canonical Author'] }]));
   expect(within(dialog).getByLabelText('Book name')).toHaveValue('Canonical Dune');
   expect(within(dialog).getByLabelText('Author')).toHaveValue('My unsaved author');
-  expect(saved().books[0]).toMatchObject({ title: 'Canonical Dune', author: 'Canonical Author' });
+  expect(saved().books[0]).toMatchObject({
+    title: 'Canonical Dune',
+    author: 'Canonical Author',
+  });
 });
 
 it('serializes searches, skips removed queued books, and continues after errors', async () => {
@@ -677,7 +960,13 @@ it('serializes searches, skips removed queued books, and continues after errors'
   const releases: ((works: WorkCandidate[]) => void)[] = [];
   const reject = new Error('Search unavailable');
   let fail!: (error: Error) => void;
-  search.mockImplementationOnce(() => new Promise((_resolve, reject) => { fail = reject; }))
+  search
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          fail = reject;
+        }),
+    )
     .mockImplementation(() => new Promise((resolve) => releases.push(resolve)));
   render(<App />);
   expect(screen.getByRole('status', { name: 'Searching for cover: First' })).toBeInTheDocument();
@@ -698,10 +987,17 @@ it('serializes searches, skips removed queued books, and continues after errors'
 it('ignores a pending old identity after editing and retries using the latest fields', async () => {
   seed();
   let resolve!: (works: WorkCandidate[]) => void;
-  search.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+  search.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
   render(<App />);
   const dialog = await edit();
-  fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Renamed' } });
+  fireEvent.change(within(dialog).getByLabelText('Book name'), {
+    target: { value: 'Renamed' },
+  });
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
   await act(async () => resolve([work]));
   await waitFor(() => expect(search).toHaveBeenCalledTimes(2));
@@ -717,19 +1013,38 @@ it('preserves manually saved artwork and allows duplicate edits when saving', as
   persist(other);
   render(<App />);
   const dialog = await edit();
-  fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Other' } });
-  fireEvent.change(within(dialog).getByLabelText('Author'), { target: { value: 'Author' } });
+  fireEvent.change(within(dialog).getByLabelText('Book name'), {
+    target: { value: 'Other' },
+  });
+  fireEvent.change(within(dialog).getByLabelText('Author'), {
+    target: { value: 'Author' },
+  });
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
   expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
-  expect(saved().books[0]).toMatchObject({ title: 'Other', author: 'Author', coverSelection: selection });
+  expect(saved().books[0]).toMatchObject({
+    title: 'Other',
+    author: 'Author',
+    coverSelection: selection,
+  });
   expect(saved().books[1]).toEqual(other.books[1]);
-  fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'New name' } });
+  fireEvent.change(within(dialog).getByLabelText('Book name'), {
+    target: { value: 'New name' },
+  });
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-  expect(saved().books[0]).toMatchObject({ title: 'New name', coverSelection: selection });
-  fireEvent.change(within(dialog).getByLabelText('Book name'), { target: { value: 'Correct title' } });
+  expect(saved().books[0]).toMatchObject({
+    title: 'New name',
+    coverSelection: selection,
+  });
+  fireEvent.change(within(dialog).getByLabelText('Book name'), {
+    target: { value: 'Correct title' },
+  });
   await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
   expect(search).not.toHaveBeenCalled();
-  expect(saved().books[0]).toMatchObject({ title: 'Correct title', author: 'Author', coverSelection: selection });
+  expect(saved().books[0]).toMatchObject({
+    title: 'Correct title',
+    author: 'Author',
+    coverSelection: selection,
+  });
   expect(saved().tiers).toEqual(board.tiers);
 });
 
@@ -741,7 +1056,11 @@ it('shows only the no-match lookup message without retry or edition search contr
   expect(within(dialog).getByText('No matching works found', { exact: true })).toBeInTheDocument();
   expect(within(dialog).queryByText('Match a book before searching its editions.')).not.toBeInTheDocument();
   expect(within(dialog).queryByRole('button', { name: 'Retry cover search' })).not.toBeInTheDocument();
-  expect(within(dialog).queryByRole('button', { name: 'Find additional editions and covers' })).not.toBeInTheDocument();
+  expect(
+    within(dialog).queryByRole('button', {
+      name: 'Find additional editions and covers',
+    }),
+  ).not.toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'Save' })).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'Upload photo' })).toBeEnabled();
   expect(editions).not.toHaveBeenCalled();

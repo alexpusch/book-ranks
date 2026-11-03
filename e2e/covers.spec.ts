@@ -10,14 +10,24 @@ test('review Show more fetches the next ten results only on click and appends th
     const offset = new URL(route.request().url()).searchParams.get('offset')!;
     offsets.push(offset);
     const docs = Array.from({ length: 12 }, (_, index) => ({
-      key: `/works/OL${index + 1}W`, title: `Dune ${index + 1}`, author_name: ['Frank Herbert'],
+      key: `/works/OL${index + 1}W`,
+      title: `Dune ${index + 1}`,
+      author_name: ['Frank Herbert'],
     }));
-    await route.fulfill({ json: { docs: docs.slice(Number(offset), Number(offset) + 10), numFound: 12 } });
+    await route.fulfill({
+      json: {
+        docs: docs.slice(Number(offset), Number(offset) + 10),
+        numFound: 12,
+      },
+    });
   });
   await page.goto('/');
   await page.getByLabel('Book name', { exact: true }).fill('Dune');
   await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
-  const card = page.getByRole('article', { name: 'Dune by Unknown author', exact: true });
+  const card = page.getByRole('article', {
+    name: 'Dune by Unknown author',
+    exact: true,
+  });
   await card.hover();
   await card.getByRole('button', { name: 'Review Dune' }).click();
   const review = page.getByRole('dialog', { name: 'Review book matches' });
@@ -28,13 +38,25 @@ test('review Show more fetches the next ten results only on click and appends th
   await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(12);
   expect(offsets).toEqual(['0', '10']);
   await expect(review.getByRole('button', { name: 'Show more' })).toHaveCount(0);
-  await gallery.getByRole('button', { name: 'Select Dune 12 by Frank Herbert', exact: true }).click();
+  await gallery
+    .getByRole('button', {
+      name: 'Select Dune 12 by Frank Herbert',
+      exact: true,
+    })
+    .click();
   await expect(review).toHaveCount(0);
-  await expect(page.getByRole('article', { name: 'Dune 12 by Frank Herbert', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('article', {
+      name: 'Dune 12 by Frank Herbert',
+      exact: true,
+    }),
+  ).toBeVisible();
 });
 
 for (const width of [1360, 390]) {
-  test(`manual multiple matches open a right reviewer and refined selection persists at ${width}px`, async ({ page }) => {
+  test(`manual multiple matches open a right reviewer and refined selection persists at ${width}px`, async ({
+    page,
+  }) => {
     await page.setViewportSize({ width, height: 900 });
     const searches: { title: string | null; author: string | null }[] = [];
     let editionRequests = 0;
@@ -42,24 +64,49 @@ for (const width of [1360, 390]) {
       editionRequests++;
       await route.fulfill({ json: { entries: [] } });
     });
-    await page.route('https://covers.openlibrary.org/**', (route) => route.fulfill({
-      contentType: 'image/png',
-      body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=', 'base64'),
-    }));
+    await page.route('https://covers.openlibrary.org/**', (route) =>
+      route.fulfill({
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=',
+          'base64',
+        ),
+      }),
+    );
     await page.route('https://openlibrary.org/search.json?**', async (route) => {
       const params = new URL(route.request().url()).searchParams;
-      searches.push({ title: params.get('title'), author: params.get('author') });
+      searches.push({
+        title: params.get('title'),
+        author: params.get('author'),
+      });
       const docs = [
-        { key: '/works/OL1W', title: 'Dune', author_name: ['F. Herbert'], cover_i: 123 },
-        { key: '/works/OL2W', title: 'Dune Messiah', author_name: ['Frank Herbert'], cover_i: 789 },
+        {
+          key: '/works/OL1W',
+          title: 'Dune',
+          author_name: ['F. Herbert'],
+          cover_i: 123,
+        },
+        {
+          key: '/works/OL2W',
+          title: 'Dune Messiah',
+          author_name: ['Frank Herbert'],
+          cover_i: 789,
+        },
       ];
-      await route.fulfill({ json: { docs: params.get('title') === 'Dune Messiah' ? [docs[1]] : docs } });
+      await route.fulfill({
+        json: {
+          docs: params.get('title') === 'Dune Messiah' ? [docs[1]] : docs,
+        },
+      });
     });
     await page.goto('/');
     await page.getByLabel('Book name', { exact: true }).fill('Dune');
     await page.getByLabel('Author', { exact: false }).fill('Frank Herbert');
     await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
-    const card = page.getByRole('article', { name: 'Dune by Frank Herbert', exact: true });
+    const card = page.getByRole('article', {
+      name: 'Dune by Frank Herbert',
+      exact: true,
+    });
     await expect(card.getByText('Multiple matches')).toBeVisible();
     await expect(card.locator('img')).toHaveCount(0);
     const coverBounds = (await card.locator('.multiple-matches-cover').boundingBox())!;
@@ -79,16 +126,22 @@ for (const width of [1360, 390]) {
     const coverCenterY = coverBounds.y + coverBounds.height / 2;
     expect(Math.abs(reviewButtonBounds.y + reviewButtonBounds.height / 2 - coverCenterY)).toBeLessThan(1);
     expect(Math.abs(removeButtonBounds.y + removeButtonBounds.height / 2 - coverCenterY)).toBeLessThan(1);
-    expect(Math.abs((reviewButtonBounds.x + removeButtonBounds.x + removeButtonBounds.width) / 2
-      - (coverBounds.x + coverBounds.width / 2))).toBeLessThan(1);
+    expect(
+      Math.abs(
+        (reviewButtonBounds.x + removeButtonBounds.x + removeButtonBounds.width) / 2 -
+          (coverBounds.x + coverBounds.width / 2),
+      ),
+    ).toBeLessThan(1);
     await expect(card.getByRole('button', { name: 'Drag Dune' })).toHaveCount(0);
     await card.getByRole('button', { name: 'Review Dune' }).click();
     const review = page.getByRole('dialog', { name: 'Review book matches' });
     await expect(review).toBeVisible();
-    await expect.poll(async () => {
-      const bounds = await review.boundingBox();
-      return bounds && bounds.x + bounds.width;
-    }).toBe(width);
+    await expect
+      .poll(async () => {
+        const bounds = await review.boundingBox();
+        return bounds && bounds.x + bounds.width;
+      })
+      .toBe(width);
     expect((await review.boundingBox())!.width).toBeLessThanOrEqual(width);
     const gallery = review.getByRole('group', { name: 'Book match gallery' });
     await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(2);
@@ -98,11 +151,15 @@ for (const width of [1360, 390]) {
     await review.getByRole('button', { name: 'Search', exact: true }).click();
     await expect(gallery.getByRole('button', { name: /^Select/ })).toHaveCount(1);
     expect(searches).toEqual([
-      { title: 'Dune', author: 'Frank Herbert' }, { title: 'Dune Messiah', author: null },
+      { title: 'Dune', author: 'Frank Herbert' },
+      { title: 'Dune Messiah', author: null },
     ]);
     await gallery.locator('.work-option').click({ position: { x: 20, y: 20 } });
     await expect(review).toHaveCount(0);
-    const chosen = page.getByRole('article', { name: 'Dune Messiah by Frank Herbert', exact: true });
+    const chosen = page.getByRole('article', {
+      name: 'Dune Messiah by Frank Herbert',
+      exact: true,
+    });
     await expect(chosen.getByRole('button', { name: 'Drag Dune Messiah' })).toBeAttached();
     expect(editionRequests).toBe(0);
     await page.reload();
@@ -120,9 +177,12 @@ test('title-only Chrome AI entry matches Children of Ruin despite a legacy editi
       value: {
         availability: async () => 'available',
         create: async () => ({
-          prompt: async (input: string) => input === 'Children of Ruin'
-            ? JSON.stringify({ books: [{ title: 'Children of Ruin', author: '' }] })
-            : JSON.stringify({ workId: 'OL20079532W' }),
+          prompt: async (input: string) =>
+            input === 'Children of Ruin'
+              ? JSON.stringify({
+                  books: [{ title: 'Children of Ruin', author: '' }],
+                })
+              : JSON.stringify({ workId: 'OL20079532W' }),
           destroy() {},
         }),
       },
@@ -132,21 +192,42 @@ test('title-only Chrome AI entry matches Children of Ruin despite a legacy editi
   await page.route('https://openlibrary.org/search.json?**', async (route) => {
     const params = new URL(route.request().url()).searchParams;
     searches.push({ title: params.get('title'), author: params.get('author') });
-    await route.fulfill({ json: { docs: [
-      { key: '/works/OL20079532W', title: 'Children of Ruin', author_name: ['Adrian Tchaikovsky'], cover_i: 8750923 },
-      { key: '/works/OL16367778M', title: 'The unanswered prayer, or, Why do so many children of the church go to ruin?' },
-    ] } });
+    await route.fulfill({
+      json: {
+        docs: [
+          {
+            key: '/works/OL20079532W',
+            title: 'Children of Ruin',
+            author_name: ['Adrian Tchaikovsky'],
+            cover_i: 8750923,
+          },
+          {
+            key: '/works/OL16367778M',
+            title: 'The unanswered prayer, or, Why do so many children of the church go to ruin?',
+          },
+        ],
+      },
+    });
   });
   await page.getByLabel('Book title and author in natural language').fill('Children of Ruin');
   await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
-  const card = page.getByRole('article', { name: 'Children of Ruin by Adrian Tchaikovsky', exact: true });
+  const card = page.getByRole('article', {
+    name: 'Children of Ruin by Adrian Tchaikovsky',
+    exact: true,
+  });
   await expect(card).toBeVisible();
   await expect(card.locator('img')).toHaveAttribute('src', /\/8750923-M\.jpg/);
   expect(searches).toEqual([{ title: 'Children of Ruin', author: null }]);
   const savedBook = () => page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0]);
   await expect.poll(savedBook).toMatchObject({
-    title: 'Children of Ruin', author: 'Adrian Tchaikovsky', matchedWorkId: 'OL20079532W',
-    coverSelection: { kind: 'open-library', workId: 'OL20079532W', coverId: 8750923 },
+    title: 'Children of Ruin',
+    author: 'Adrian Tchaikovsky',
+    matchedWorkId: 'OL20079532W',
+    coverSelection: {
+      kind: 'open-library',
+      workId: 'OL20079532W',
+      coverId: 8750923,
+    },
   });
   await page.reload();
   await expect(card).toBeVisible();
@@ -161,9 +242,15 @@ test('AI-normalized titles and authors are saved and sent to Open Library lookup
       value: {
         availability: async () => 'available',
         create: async () => ({
-          prompt: async () => JSON.stringify({
-            books: [{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }],
-          }),
+          prompt: async () =>
+            JSON.stringify({
+              books: [
+                {
+                  title: 'The Spear Cuts Through Water',
+                  author: 'Simon Jimenez',
+                },
+              ],
+            }),
           destroy() {},
         }),
       },
@@ -175,20 +262,35 @@ test('AI-normalized titles and authors are saved and sent to Open Library lookup
     inputs.push({ title: params.get('title'), author: params.get('author') });
     await route.fulfill({ json: { docs: [] } });
   });
-  await page.getByLabel('Book title and author in natural language').fill('The Spear Cuts Through Water: A Novel by Simon Jimenez');
+  await page
+    .getByLabel('Book title and author in natural language')
+    .fill('The Spear Cuts Through Water: A Novel by Simon Jimenez');
   await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
-  await expect(page.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeVisible();
+  await expect(
+    page.getByRole('article', {
+      name: 'The Spear Cuts Through Water by Simon Jimenez',
+    }),
+  ).toBeVisible();
   await expect.poll(() => inputs).toEqual([{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }]);
   await page.reload();
-  await expect(page.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeVisible();
+  await expect(
+    page.getByRole('article', {
+      name: 'The Spear Cuts Through Water by Simon Jimenez',
+    }),
+  ).toBeVisible();
 });
 
-test('serial cover searches show waiting and spinning states and saving changed fields searches again', async ({ page }) => {
+test('serial cover searches show waiting and spinning states and saving changed fields searches again', async ({
+  page,
+}) => {
   const inputs: { title: string; author: string }[] = [];
   const release = new Map<string, () => void>();
   await page.route('https://openlibrary.org/search.json?**', async (route) => {
     const params = new URL(route.request().url()).searchParams;
-    const input = { title: params.get('title')!, author: params.get('author') ?? 'Unknown author' };
+    const input = {
+      title: params.get('title')!,
+      author: params.get('author') ?? 'Unknown author',
+    };
     inputs.push(input);
     await new Promise<void>((resolve) => release.set(input.title, resolve));
     await route.fulfill({ json: { docs: [] } });
@@ -199,7 +301,10 @@ test('serial cover searches show waiting and spinning states and saving changed 
     await page.getByRole('button', { name: /^\+ Add books?$/ }).click();
     await expect(page.getByRole('button', { name: /^\+ Add books?$/ })).toBeEnabled();
   }
-  const first = page.getByRole('article', { name: 'First by Unknown author', exact: true });
+  const first = page.getByRole('article', {
+    name: 'First by Unknown author',
+    exact: true,
+  });
   const second = page.locator('.book-card').filter({ has: page.getByText('Second', { exact: true }) });
   await expect(first.getByRole('status', { name: 'Searching for cover: First' })).toBeVisible();
   await expect(first.locator('.cover-spinner')).toHaveCSS('animation-name', 'cover-spin');
@@ -207,7 +312,10 @@ test('serial cover searches show waiting and spinning states and saving changed 
   await expect(second.locator('.chrome-spinner')).toHaveCount(0);
   await expect(second.locator('.cover-spinner')).toHaveCount(0);
   expect(inputs.map((input) => input.title)).toEqual(['First']);
-  const removed = page.getByRole('article', { name: 'Removed by Unknown author', exact: true });
+  const removed = page.getByRole('article', {
+    name: 'Removed by Unknown author',
+    exact: true,
+  });
   await removed.hover();
   await removed.getByRole('button', { name: 'Remove Removed', exact: true }).click();
   release.get('First')!();
@@ -218,7 +326,10 @@ test('serial cover searches show waiting and spinning states and saving changed 
   await expect(page.getByRole('button', { name: /^Choose cover/ })).toHaveCount(0);
   await first.hover();
   await first.getByRole('button', { name: 'Edit First', exact: true }).click();
-  const editor = page.getByRole('dialog', { name: 'Book details', exact: true });
+  const editor = page.getByRole('dialog', {
+    name: 'Book details',
+    exact: true,
+  });
   await expect(editor).toBeVisible();
   await editor.getByLabel('Book name').fill('Corrected');
   await editor.getByLabel('Author', { exact: true }).fill('Correct author');
@@ -228,46 +339,74 @@ test('serial cover searches show waiting and spinning states and saving changed 
   expect(inputs).toHaveLength(3);
   release.get('Corrected')!();
   await expect(editor.getByText('No matching works found', { exact: true })).toBeVisible();
-  await expect(editor.getByText('Match a book before searching its editions.', { exact: true })).toHaveCount(0);
+  await expect(
+    editor.getByText('Match a book before searching its editions.', {
+      exact: true,
+    }),
+  ).toHaveCount(0);
   await expect(editor.getByRole('button', { name: 'Find additional editions and covers' })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(editor).toHaveCount(0);
-  await expect(page.getByRole('article', { name: 'Corrected by Correct author', exact: true })).toBeVisible();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0]))
-    .toMatchObject({ title: 'Corrected', author: 'Correct author' });
+  await expect(
+    page.getByRole('article', {
+      name: 'Corrected by Correct author',
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0])).toMatchObject({
+    title: 'Corrected',
+    author: 'Correct author',
+  });
 });
 
 async function seed(page: Page) {
   let board = importBooks(createBoard(), 'Red edition | Author\nBlue edition | Other');
-  board.books.forEach((book, index) => { book.coverSelection = {
-    kind: 'open-library', workId: `OL${index + 1}W`, editionId: `OL${index + 1}M`, coverId: index + 1,
-  }; });
+  board.books.forEach((book, index) => {
+    book.coverSelection = {
+      kind: 'open-library',
+      workId: `OL${index + 1}W`,
+      editionId: `OL${index + 1}M`,
+      coverId: index + 1,
+    };
+  });
   for (const book of board.books) board = moveBook(board, book.id, 'tier-S');
   await page.addInitScript((snapshot) => localStorage.setItem('shelf-life.board.v1', JSON.stringify(snapshot)), board);
 }
 async function fixtures(page: Page) {
   await page.goto('/');
-  const data = await page.evaluate(() => ['#ee2222', '#2222ee'].map((color) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 180; canvas.height = 240;
-    const context = canvas.getContext('2d')!;
-    context.fillStyle = color; context.fillRect(0, 0, 180, 240);
-    return canvas.toDataURL('image/png').split(',')[1];
-  }));
+  const data = await page.evaluate(() =>
+    ['#ee2222', '#2222ee'].map((color) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 180;
+      canvas.height = 240;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = color;
+      context.fillRect(0, 0, 180, 240);
+      return canvas.toDataURL('image/png').split(',')[1];
+    }),
+  );
   await page.route('https://covers.openlibrary.org/**', async (route) => {
     const red = route.request().url().includes('/1-');
-    await route.fulfill({ contentType: 'image/png', body: Buffer.from(data[red ? 0 : 1], 'base64'),
-      headers: { 'Access-Control-Allow-Origin': '*' } });
+    await route.fulfill({
+      contentType: 'image/png',
+      body: Buffer.from(data[red ? 0 : 1], 'base64'),
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
   });
 }
 async function jpegColors(page: Page, bytes: Buffer) {
   return page.evaluate(async (base64) => {
-    const image = new Image(); image.src = `data:image/jpeg;base64,${base64}`;
+    const image = new Image();
+    image.src = `data:image/jpeg;base64,${base64}`;
     await image.decode();
-    const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
-    const context = canvas.getContext('2d')!; context.drawImage(image, 0, 0);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-    let red = 0; let blue = 0;
+    let red = 0;
+    let blue = 0;
     for (let offset = 0; offset < pixels.length; offset += 4) {
       if (pixels[offset] > 180 && pixels[offset + 1] < 80 && pixels[offset + 2] < 80) red++;
       if (pixels[offset + 2] > 180 && pixels[offset] < 80 && pixels[offset + 1] < 80) blue++;
@@ -284,7 +423,10 @@ test('own-cover card matches cover dimensions on desktop and narrow screens', as
   await page.reload();
   await page.getByRole('article', { name: 'Custom cover by Author', exact: true }).hover();
   await page.getByRole('button', { name: 'Edit Custom cover', exact: true }).click();
-  const editor = page.getByRole('dialog', { name: 'Book details', exact: true });
+  const editor = page.getByRole('dialog', {
+    name: 'Book details',
+    exact: true,
+  });
   for (const width of [1360, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     const dimensions = await editor.evaluate((dialog) => {
@@ -297,8 +439,13 @@ test('own-cover card matches cover dimensions on desktop and narrow screens', as
         overflow: upload.scrollHeight - upload.clientHeight,
         buttonsFit: Array.from(upload.querySelectorAll('button')).every((button) => {
           const rect = button.getBoundingClientRect();
-          return rect.top >= bounds.top && rect.bottom <= bounds.bottom &&
-            rect.left >= bounds.left && rect.right <= bounds.right && button.scrollWidth <= button.clientWidth;
+          return (
+            rect.top >= bounds.top &&
+            rect.bottom <= bounds.bottom &&
+            rect.left >= bounds.left &&
+            rect.right <= bounds.right &&
+            button.scrollWidth <= button.clientWidth
+          );
         }),
       };
     });
@@ -310,7 +457,10 @@ test('own-cover card matches cover dimensions on desktop and narrow screens', as
 });
 
 for (const method of ['upload', 'paste', 'hover-paste'] as const) {
-  test(`custom cover ${method} stays local, resizes, persists, and appears in the JPEG`, async ({ page, context }, testInfo) => {
+  test(`custom cover ${method} stays local, resizes, persists, and appears in the JPEG`, async ({
+    page,
+    context,
+  }, testInfo) => {
     await page.goto('/');
     let board = importBooks(createBoard(), 'Custom cover | Author');
     board.books[0].coverSelection = { kind: 'placeholder' };
@@ -325,23 +475,38 @@ for (const method of ['upload', 'paste', 'hover-paste'] as const) {
     });
     const png = await page.evaluate(() => {
       const canvas = document.createElement('canvas');
-      canvas.width = 2400; canvas.height = 3600;
+      canvas.width = 2400;
+      canvas.height = 3600;
       const context = canvas.getContext('2d')!;
-      context.fillStyle = '#ee2222'; context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#ee2222';
+      context.fillRect(0, 0, canvas.width, canvas.height);
       return canvas.toDataURL('image/png');
     });
-    const card = page.getByRole('article', { name: 'Custom cover by Author', exact: true });
-    const pasteHint = await page.evaluate(() => /Mac/iu.test(navigator.platform)
-      ? 'cmd+v to paste cover image' : 'ctrl+v to paste cover image');
+    const card = page.getByRole('article', {
+      name: 'Custom cover by Author',
+      exact: true,
+    });
+    const pasteHint = await page.evaluate(() =>
+      /Mac/iu.test(navigator.platform) ? 'cmd+v to paste cover image' : 'ctrl+v to paste cover image',
+    );
     await expect(card).toHaveAttribute('title', pasteHint);
     await card.hover();
     await expect(card.getByRole('img', { name: pasteHint, exact: true })).toHaveCount(0);
     if (method !== 'hover-paste') await card.getByRole('button', { name: 'Edit Custom cover', exact: true }).click();
-    const editor = page.getByRole('dialog', { name: 'Book details', exact: true });
+    const editor = page.getByRole('dialog', {
+      name: 'Book details',
+      exact: true,
+    });
     if (method === 'upload') {
       const chooser = page.waitForEvent('filechooser');
       await editor.getByRole('button', { name: 'Upload photo', exact: true }).click();
-      await (await chooser).setFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png.split(',')[1], 'base64') });
+      await (
+        await chooser
+      ).setFiles({
+        name: 'cover.png',
+        mimeType: 'image/png',
+        buffer: Buffer.from(png.split(',')[1], 'base64'),
+      });
     } else {
       await context.grantPermissions(['clipboard-read', 'clipboard-write']);
       await page.evaluate(async (dataUrl) => {
@@ -365,7 +530,12 @@ for (const method of ['upload', 'paste', 'hover-paste'] as const) {
     await expect(card.locator('img')).toHaveAttribute('src', /^data:image\/jpeg;base64,/);
     await card.hover();
     await card.getByRole('button', { name: 'Edit Custom cover', exact: true }).click();
-    await expect(editor.getByRole('button', { name: 'Select your uploaded cover', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(
+      editor.getByRole('button', {
+        name: 'Select your uploaded cover',
+        exact: true,
+      }),
+    ).toHaveAttribute('aria-pressed', 'true');
     await page.keyboard.press('Escape');
     const downloaded = page.waitForEvent('download');
     await page.getByRole('button', { name: 'Download', exact: true }).click();
@@ -380,11 +550,19 @@ for (const method of ['upload', 'paste', 'hover-paste'] as const) {
 test('exports distinct verified edition artwork, reuses bytes, and persists selections', async ({ page }, testInfo) => {
   await fixtures(page);
   const metadata: string[] = [];
-  page.on('request', (request) => { if (request.url().startsWith('https://openlibrary.org/')) metadata.push(request.url()); });
+  page.on('request', (request) => {
+    if (request.url().startsWith('https://openlibrary.org/')) metadata.push(request.url());
+  });
   const largeImages: string[] = [];
-  page.on('request', (request) => { if (request.url().includes('-L.jpg')) largeImages.push(request.url()); });
-  await seed(page); await page.reload();
-  await expect(page.getByRole('region', { name: 'Tier S', exact: true }).locator('img').first()).toHaveAttribute('src', /\/1-M.jpg/);
+  page.on('request', (request) => {
+    if (request.url().includes('-L.jpg')) largeImages.push(request.url());
+  });
+  await seed(page);
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Tier S', exact: true }).locator('img').first()).toHaveAttribute(
+    'src',
+    /\/1-M.jpg/,
+  );
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export JPEG/ }).click();
   const download = await downloaded;
@@ -398,24 +576,54 @@ test('exports distinct verified edition artwork, reuses bytes, and persists sele
   expect(largeImages).toHaveLength(2);
   expect(metadata).toHaveLength(0);
   await page.reload();
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0].coverSelection.editionId)).toBe('OL1M');
+  expect(
+    await page.evaluate(
+      () => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0].coverSelection.editionId,
+    ),
+  ).toBe('OL1M');
 });
-test('uses the search cover and loads additional editions only through the editor button', async ({ page }, testInfo) => {
+test('uses the search cover and loads additional editions only through the editor button', async ({
+  page,
+}, testInfo) => {
   await fixtures(page);
   let searchRequests = 0;
   await page.route('https://openlibrary.org/search.json?**', async (route) => {
     searchRequests++;
-    await route.fulfill({ json: { docs: [{
-      key: '/works/OL1W', title: 'Red edition', author_name: ['Author'], cover_i: 2,
-    }] } });
+    await route.fulfill({
+      json: {
+        docs: [
+          {
+            key: '/works/OL1W',
+            title: 'Red edition',
+            author_name: ['Author'],
+            cover_i: 2,
+          },
+        ],
+      },
+    });
   });
   let editionRequests = 0;
   await page.route('https://openlibrary.org/works/OL1W/editions.json?**', async (route) => {
     editionRequests++;
-    await route.fulfill({ json: { size: 2, entries: [
-      { key: '/books/OL1M', title: 'Red edition', publish_date: '2000', covers: [2] },
-      { key: '/books/OL2M', title: 'Red edition', publish_date: '2025', covers: [1] },
-    ] } });
+    await route.fulfill({
+      json: {
+        size: 2,
+        entries: [
+          {
+            key: '/books/OL1M',
+            title: 'Red edition',
+            publish_date: '2000',
+            covers: [2],
+          },
+          {
+            key: '/books/OL2M',
+            title: 'Red edition',
+            publish_date: '2025',
+            covers: [1],
+          },
+        ],
+      },
+    });
   });
   let board = importBooks(createBoard(), 'Red book: A Novel | A. Writer');
   board = moveBook(board, board.books[0].id, 'tier-S');
@@ -496,7 +704,10 @@ test('uses the search cover and loads additional editions only through the edito
   await ranked.getByRole('article').hover();
   await page.getByRole('button', { name: 'Edit Red edition' }).click();
   await expect(dialog.getByRole('button', { name: /Select edition OL2M/ })).toHaveAttribute('aria-pressed', 'true');
-  await dialog.getByRole('button', { name: /Select edition OL2M/ }).locator('img').click();
+  await dialog
+    .getByRole('button', { name: /Select edition OL2M/ })
+    .locator('img')
+    .click();
   await expect(dialog).toHaveCount(0);
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: /Export JPEG/ }).click();
@@ -505,14 +716,22 @@ test('uses the search cover and loads additional editions only through the edito
   const colors = await jpegColors(page, await readFile(file));
   expect(colors.red).toBeGreaterThan(5_000);
   expect(colors.blue).toBe(0);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0].coverSelection.editionId)).toBe('OL2M');
+  expect(
+    await page.evaluate(
+      () => JSON.parse(localStorage.getItem('shelf-life.board.v1')!).books[0].coverSelection.editionId,
+    ),
+  ).toBe('OL2M');
 });
 test('requires explicit placeholder export when selected artwork fails', async ({ page }) => {
   await fixtures(page);
   await page.route('https://covers.openlibrary.org/**', async (route) => {
-    await route.fulfill({ status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
+    await route.fulfill({
+      status: 404,
+      headers: { 'Access-Control-Allow-Origin': '*' },
+    });
   });
-  await seed(page); await page.reload();
+  await seed(page);
+  await page.reload();
   await page.getByRole('button', { name: /Export JPEG/ }).click();
   await expect(page.getByRole('alert')).toContainText('Red edition');
   await expect(page.getByRole('alert')).toContainText('Blue edition');
@@ -529,9 +748,12 @@ test('bounds stalled image preflight and allows an explicit placeholder decision
       await route.abort();
     } else await route.fallback();
   });
-  await seed(page); await page.reload();
+  await seed(page);
+  await page.reload();
   await page.getByRole('button', { name: /Export JPEG/ }).click();
-  await expect(page.getByRole('alert')).toContainText('could not be embedded', { timeout: 15_000 });
+  await expect(page.getByRole('alert')).toContainText('could not be embedded', {
+    timeout: 15_000,
+  });
   await expect(page.getByRole('button', { name: 'Retry export' })).toBeVisible();
 });
 test('late lookup results preserve placement and cannot change an export snapshot', async ({ page }, testInfo) => {
@@ -539,21 +761,44 @@ test('late lookup results preserve placement and cannot change an export snapsho
   let releaseLookup!: () => void;
   let startedPreflight!: () => void;
   let releasePreflight!: () => void;
-  const lookupGate = new Promise<void>((resolve) => { releaseLookup = resolve; });
-  const preflightStarted = new Promise<void>((resolve) => { startedPreflight = resolve; });
-  const preflightGate = new Promise<void>((resolve) => { releasePreflight = resolve; });
+  const lookupGate = new Promise<void>((resolve) => {
+    releaseLookup = resolve;
+  });
+  const preflightStarted = new Promise<void>((resolve) => {
+    startedPreflight = resolve;
+  });
+  const preflightGate = new Promise<void>((resolve) => {
+    releasePreflight = resolve;
+  });
   await page.route('https://openlibrary.org/search.json?**', async (route) => {
     await lookupGate;
-    await route.fulfill({ json: { docs: [{
-      key: '/works/OL1W', title: 'Red edition', author_name: ['Author'], cover_i: 1,
-    }] } });
+    await route.fulfill({
+      json: {
+        docs: [
+          {
+            key: '/works/OL1W',
+            title: 'Red edition',
+            author_name: ['Author'],
+            cover_i: 1,
+          },
+        ],
+      },
+    });
   });
   await page.route('https://covers.openlibrary.org/**', async (route) => {
-    if (route.request().url().includes('-L.jpg')) { startedPreflight(); await preflightGate; }
+    if (route.request().url().includes('-L.jpg')) {
+      startedPreflight();
+      await preflightGate;
+    }
     await route.fallback();
   });
   let board = importBooks(createBoard(), 'Red edition | Author\nBlue edition | Other');
-  board.books[1].coverSelection = { kind: 'open-library', workId: 'OL2W', editionId: 'OL2M', coverId: 2 };
+  board.books[1].coverSelection = {
+    kind: 'open-library',
+    workId: 'OL2W',
+    editionId: 'OL2M',
+    coverId: 2,
+  };
   for (const book of board.books) board = moveBook(board, book.id, 'tier-S');
   await page.addInitScript((snapshot) => localStorage.setItem('shelf-life.board.v1', JSON.stringify(snapshot)), board);
   await page.reload();

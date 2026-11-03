@@ -51,5 +51,15 @@ export function useBoard(setNotice: (notice: string) => void) {
       setStorageWarning(`Storage is still unavailable. ${errorMessage(error)}`);
     }
   }
-  return { board, boardRef, change, resetVersion, storageBlocked, storageWarning, retryStorage, actionError, setActionError };
+  return {
+    board,
+    boardRef,
+    change,
+    resetVersion,
+    storageBlocked,
+    storageWarning,
+    retryStorage,
+    actionError,
+    setActionError,
+  };
 }

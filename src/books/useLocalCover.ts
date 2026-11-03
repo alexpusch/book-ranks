@@ -19,7 +19,8 @@ export function useLocalCover() {
       controller.signal.throwIfAborted();
       onSelect(selection);
     } catch (error) {
-      if (!controller.signal.aborted) setImageError(error instanceof Error ? error.message : 'Could not load the cover image.');
+      if (!controller.signal.aborted)
+        setImageError(error instanceof Error ? error.message : 'Could not load the cover image.');
     } finally {
       if (!controller.signal.aborted) setImageBusy(false);
       if (imageController.current === controller) imageController.current = null;

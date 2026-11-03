@@ -1,4 +1,15 @@
-import { editionPattern, normalize, workPattern, type EditionCandidate, type EditionInput, type EditionPage, type LookupInput, type SearchInput, type SearchPage, type WorkCandidate } from './types';
+import {
+  editionPattern,
+  normalize,
+  workPattern,
+  type EditionCandidate,
+  type EditionInput,
+  type EditionPage,
+  type LookupInput,
+  type SearchInput,
+  type SearchPage,
+  type WorkCandidate,
+} from './types';
 
 const SEARCH_LIMIT = 10;
 const EDITION_PAGE_SIZE = 20;
@@ -93,7 +104,10 @@ function parseEdition(value: unknown): EditionCandidate {
     publishers: strings(edition.publishers),
     ...(typeof edition.publish_date === 'string' ? { publicationDate: edition.publish_date } : {}),
     isbns: [...strings(edition.isbn_10), ...strings(edition.isbn_13)],
-    covers: coverIds(edition.covers).map((coverId) => ({ coverId, editionId: id })),
+    covers: coverIds(edition.covers).map((coverId) => ({
+      coverId,
+      editionId: id,
+    })),
   };
 }
 
@@ -104,8 +118,13 @@ function parseNextCursor(links: unknown, url: URL, cursor: string): string | nul
   if (typeof next !== 'string') throw new Error('Invalid edition pagination.');
   const nextUrl = new URL(next, 'https://openlibrary.org');
   const offset = nextUrl.searchParams.get('offset');
-  if (nextUrl.origin !== 'https://openlibrary.org' || nextUrl.pathname !== url.pathname ||
-    !offset || !/^[1-9]\d{0,5}$/u.test(offset) || Number(offset) <= Number(cursor)) {
+  if (
+    nextUrl.origin !== 'https://openlibrary.org' ||
+    nextUrl.pathname !== url.pathname ||
+    !offset ||
+    !/^[1-9]\d{0,5}$/u.test(offset) ||
+    Number(offset) <= Number(cursor)
+  ) {
     throw new Error('Invalid edition pagination.');
   }
   return offset;
@@ -132,8 +151,14 @@ export function createOpenLibraryClient(options: OpenLibraryClientOptions = {}):
     const delay = Math.max(0, nextRequest - now());
     if (delay > MAX_BACKOFF_MS) throw new Error('Open Library is throttling requests; retry later.');
     await new Promise<void>((resolve, reject) => {
-      const abort = () => { clearTimeout(timer); reject(signal.reason); };
-      const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, delay);
+      const abort = () => {
+        clearTimeout(timer);
+        reject(signal.reason);
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      }, delay);
       signal.addEventListener('abort', abort, { once: true });
     });
     signal.throwIfAborted();
@@ -176,7 +201,10 @@ export function createOpenLibraryClient(options: OpenLibraryClientOptions = {}):
     if (pending >= queueLimit) throw new Error('Cover lookup queue is full. Please retry later.');
     pending++;
     const task = tail.then(() => fetchWithRetries(url, signal));
-    tail = task.then(() => undefined, () => undefined);
+    tail = task.then(
+      () => undefined,
+      () => undefined,
+    );
     try {
       return await task;
     } finally {
@@ -208,8 +236,8 @@ export function createOpenLibraryClient(options: OpenLibraryClientOptions = {}):
       throw new Error('Malformed search result count.');
     }
     const nextOffset = Number(cursor) + SEARCH_LIMIT;
-    const hasMore = data.docs.length > 0 && (total === undefined
-      ? data.docs.length === SEARCH_LIMIT : nextOffset < Number(total));
+    const hasMore =
+      data.docs.length > 0 && (total === undefined ? data.docs.length === SEARCH_LIMIT : nextOffset < Number(total));
     return {
       works: data.docs.map(parseWork).filter((work) => work !== null),
       nextCursor: hasMore ? String(nextOffset) : null,
@@ -224,8 +252,12 @@ export function createOpenLibraryClient(options: OpenLibraryClientOptions = {}):
     url.searchParams.set('limit', String(EDITION_PAGE_SIZE));
     url.searchParams.set('offset', cursor);
     const data = record(await request(url, signal));
-    if (!Array.isArray(data.entries) || data.entries.length > EDITION_PAGE_SIZE ||
-      !Number.isSafeInteger(data.size) || Number(data.size) < 0) {
+    if (
+      !Array.isArray(data.entries) ||
+      data.entries.length > EDITION_PAGE_SIZE ||
+      !Number.isSafeInteger(data.size) ||
+      Number(data.size) < 0
+    ) {
       throw new Error('Malformed edition page.');
     }
     return {

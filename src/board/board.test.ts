@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GALLERY, addTier, booksAt, clearGallery, clearRankings, createBoard, deleteTier, importBooks, locationOf,
-  moveBook, queueBook, removeBook, reorderTier, resolveQueuedBooks, updateBook, updateTier,
+  GALLERY,
+  addTier,
+  booksAt,
+  clearGallery,
+  clearRankings,
+  createBoard,
+  deleteTier,
+  importBooks,
+  locationOf,
+  moveBook,
+  queueBook,
+  removeBook,
+  reorderTier,
+  resolveQueuedBooks,
+  updateBook,
+  updateTier,
 } from './board';
 
 describe('book import', () => {
@@ -10,10 +24,17 @@ describe('book import', () => {
     board = queueBook(board, 'Two books');
     board = queueBook(board, 'Later batch');
     const id = board.gallery[1];
-    const entries = [{ title: 'Dune', author: '' }, { title: 'Dune', author: '' }];
+    const entries = [
+      { title: 'Dune', author: '' },
+      { title: 'Dune', author: '' },
+    ];
     const next = resolveQueuedBooks(board, id, entries);
     expect(next.books).toHaveLength(4);
-    expect(next.books[1]).toEqual({ id, title: 'Dune', author: 'Unknown author' });
+    expect(next.books[1]).toEqual({
+      id,
+      title: 'Dune',
+      author: 'Unknown author',
+    });
     expect(next.gallery).toEqual([board.gallery[0], id, next.books[3].id, board.gallery[2]]);
     expect(board.books[1].pendingInput).toBe('Two books');
     expect(() => resolveQueuedBooks(board, id, [])).toThrow('No books');
@@ -27,10 +48,16 @@ describe('book import', () => {
     board = moveBook(board, id, 'tier-S');
     board.books[0].coverSelection = { kind: 'placeholder' };
     const next = resolveQueuedBooks(board, id, [
-      { title: 'Dune', author: 'Frank Herbert' }, { title: 'Piranesi', author: '' },
+      { title: 'Dune', author: 'Frank Herbert' },
+      { title: 'Piranesi', author: '' },
     ]);
     expect(next.tiers).toEqual(board.tiers);
-    expect(next.books[0]).toEqual({ id, title: 'Dune', author: 'Frank Herbert', coverSelection: { kind: 'placeholder' } });
+    expect(next.books[0]).toEqual({
+      id,
+      title: 'Dune',
+      author: 'Frank Herbert',
+      coverSelection: { kind: 'placeholder' },
+    });
     expect(next.gallery).toEqual([next.books[1].id]);
     expect(next.books[1].coverSelection).toBeUndefined();
   });
@@ -39,7 +66,11 @@ describe('book import', () => {
     const input = '  Dune: A Novel by Frank  Herbert  ';
     let board = queueBook(createBoard(), input);
     const id = board.gallery[0];
-    expect(board.books[0]).toMatchObject({ id, title: input, pendingInput: input });
+    expect(board.books[0]).toMatchObject({
+      id,
+      title: input,
+      pendingInput: input,
+    });
     const duplicate = queueBook(board, input.toLowerCase());
     expect(duplicate.books).toHaveLength(2);
     expect(duplicate.books[1].pendingInput).toBe(input.toLowerCase());
@@ -47,17 +78,29 @@ describe('book import', () => {
     expect(() => queueBook(board, '   ')).toThrow('title cannot be empty');
     board = moveBook(board, id, 'tier-S');
     board.books[0].coverSelection = { kind: 'placeholder' };
-    const next = updateBook(board, id, { title: 'Dune', author: 'Frank Herbert' });
-    expect(next.books[0]).toEqual({ id, title: 'Dune', author: 'Frank Herbert', coverSelection: { kind: 'placeholder' } });
+    const next = updateBook(board, id, {
+      title: 'Dune',
+      author: 'Frank Herbert',
+    });
+    expect(next.books[0]).toEqual({
+      id,
+      title: 'Dune',
+      author: 'Frank Herbert',
+      coverSelection: { kind: 'placeholder' },
+    });
     expect(next.tiers[0].bookIds).toEqual([id]);
     expect(board.books[0].pendingInput).toBe(input);
   });
 
   it('imports structured AI results without interpreting title punctuation as separators', () => {
     const board = importBooks(createBoard(), [{ title: ' Title | Subtitle ', author: '' }]);
-    expect(board.books[0]).toMatchObject({ title: 'Title | Subtitle', author: 'Unknown author' });
+    expect(board.books[0]).toMatchObject({
+      title: 'Title | Subtitle',
+      author: 'Unknown author',
+    });
     const next = importBooks(board, [
-      { title: 'New', author: '' }, { title: 'title | subtitle', author: 'Unknown author' },
+      { title: 'New', author: '' },
+      { title: 'title | subtitle', author: 'Unknown author' },
     ]);
     expect(next.books).toHaveLength(3);
     expect(board.books).toHaveLength(1);
@@ -68,7 +111,8 @@ describe('book import', () => {
   it('parses optional authors, whitespace, and blank lines', () => {
     const board = importBooks(createBoard(), '\n  Dune  | Frank   Herbert \r\n Piranesi \n\n');
     expect(board.books.map(({ title, author }) => ({ title, author }))).toEqual([
-      { title: 'Dune', author: 'Frank Herbert' }, { title: 'Piranesi', author: 'Unknown author' },
+      { title: 'Dune', author: 'Frank Herbert' },
+      { title: 'Piranesi', author: 'Unknown author' },
     ]);
     expect(board.gallery).toEqual(board.books.map((book) => book.id));
   });
@@ -91,7 +135,10 @@ describe('book import', () => {
   it('allows duplicates of ranked and unranked books without changing existing placements', () => {
     let board = importBooks(createBoard(), 'Dune | Frank Herbert\nPiranesi');
     board = moveBook(board, board.gallery[0], board.tiers[0].id);
-    const next = importBooks(board, 'New book\nDUNE | frank herbert\npiranesi | Unknown author\nDune | Different Author');
+    const next = importBooks(
+      board,
+      'New book\nDUNE | frank herbert\npiranesi | Unknown author\nDune | Different Author',
+    );
     expect(next.books).toHaveLength(6);
     expect(next.tiers).toEqual(board.tiers);
     expect(next.gallery).toHaveLength(5);
@@ -180,7 +227,10 @@ describe('board operations', () => {
     const id = board.tiers[0].id;
     board = moveBook(moveBook(board, one, id), two, id);
     board = updateTier(board, id, { name: 'Favorites', color: '#abcdef' });
-    expect(board.tiers[0]).toMatchObject({ name: 'Favorites', color: '#abcdef' });
+    expect(board.tiers[0]).toMatchObject({
+      name: 'Favorites',
+      color: '#abcdef',
+    });
     expect(() => updateTier(board, id, { name: ' ' })).toThrow('empty');
     expect(() => updateTier(board, id, { color: 'red' })).toThrow('color');
     board = reorderTier(board, id, 1);
@@ -205,14 +255,28 @@ describe('board operations', () => {
     const board = populated();
     const [one, two] = board.books;
     one.coverSelection = { kind: 'placeholder' };
-    const next = updateBook(board, one.id, { title: '  New   name ', author: ' ' });
-    expect(next.books[0]).toEqual({ ...one, title: 'New name', author: 'Unknown author' });
+    const next = updateBook(board, one.id, {
+      title: '  New   name ',
+      author: ' ',
+    });
+    expect(next.books[0]).toEqual({
+      ...one,
+      title: 'New name',
+      author: 'Unknown author',
+    });
     expect(board.books[0].title).toBe('One');
     expect(next.gallery).toEqual(board.gallery);
     expect(next.tiers).toEqual(board.tiers);
     expect(() => updateBook(board, one.id, { title: ' ', author: '' })).toThrow('empty');
-    const duplicate = updateBook(board, one.id, { title: two.title, author: two.author });
-    expect(duplicate.books[0]).toEqual({ ...one, title: two.title, author: two.author });
+    const duplicate = updateBook(board, one.id, {
+      title: two.title,
+      author: two.author,
+    });
+    expect(duplicate.books[0]).toEqual({
+      ...one,
+      title: two.title,
+      author: two.author,
+    });
     expect(duplicate.books[1]).toEqual(two);
     expect(duplicate.gallery).toEqual(board.gallery);
     expect(() => updateBook(board, 'missing', two)).toThrow('not found');

@@ -8,7 +8,13 @@ export interface BoardProps {
   onRemove: (id: string) => void;
 }
 
-export function BookZone({ id, bookIds, board, onRemove, gallery = false }: BoardProps & {
+export function BookZone({
+  id,
+  bookIds,
+  board,
+  onRemove,
+  gallery = false,
+}: BoardProps & {
   id: string;
   bookIds: string[];
   gallery?: boolean;
@@ -17,12 +23,14 @@ export function BookZone({ id, bookIds, board, onRemove, gallery = false }: Boar
   const highlighted = isOver || bookIds.some((bookId) => bookId === over?.id);
   const books = new Map(board.books.map((book) => [book.id, book]));
   return (
-    <div ref={setNodeRef} className={`book-zone ${gallery ? 'gallery-zone' : 'tier-zone'} ${highlighted ? 'drop-over' : ''}`}
-      data-zone={id}>
+    <div
+      ref={setNodeRef}
+      className={`book-zone ${gallery ? 'gallery-zone' : 'tier-zone'} ${highlighted ? 'drop-over' : ''}`}
+      data-zone={id}
+    >
       <SortableContext items={bookIds} strategy={gallery ? horizontalListSortingStrategy : rectSortingStrategy}>
         {bookIds.map((bookId) => (
-          <BookCard key={bookId} book={books.get(bookId)!} location={id}
-            onRemove={onRemove} />
+          <BookCard key={bookId} book={books.get(bookId)!} location={id} onRemove={onRemove} />
         ))}
       </SortableContext>
       {!bookIds.length && <p className="zone-hint">{gallery ? 'your books' : 'Drop a book here'}</p>}

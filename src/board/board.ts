@@ -58,22 +58,33 @@ export function importBooks(board: Board, input: string | BookInput[]): Board {
     const author = tidy(rawAuthor) || UNKNOWN_AUTHOR;
     const label = `${typeof input === 'string' ? 'Line' : 'Book'} ${index + 1}`;
     if (!title || extra.length) {
-      errors.push(`${label}: ${typeof input === 'string' ? 'use Title | Author with a nonempty title and at most one |.' : 'the title cannot be empty.'}`);
+      errors.push(
+        `${label}: ${typeof input === 'string' ? 'use Title | Author with a nonempty title and at most one |.' : 'the title cannot be empty.'}`,
+      );
       return;
     }
     entries.push({ title, author });
   });
   if (errors.length) throw new Error(errors.join('\n'));
   if (!entries.length) throw new Error('Enter at least one book title.');
-  const books = entries.map((entry) => ({ ...entry, id: `book-${crypto.randomUUID()}` }));
-  return { ...board, books: [...board.books, ...books], gallery: [...board.gallery, ...books.map((book) => book.id)] };
+  const books = entries.map((entry) => ({
+    ...entry,
+    id: `book-${crypto.randomUUID()}`,
+  }));
+  return {
+    ...board,
+    books: [...board.books, ...books],
+    gallery: [...board.gallery, ...books.map((book) => book.id)],
+  };
 }
 
 export function queueBook(board: Board, input: string): Board {
   const next = importBooks(board, [{ title: input, author: '' }]);
   const id = next.gallery[next.gallery.length - 1];
-  return { ...next, books: next.books.map((book) => book.id === id
-    ? { ...book, title: input, pendingInput: input } : book) };
+  return {
+    ...next,
+    books: next.books.map((book) => (book.id === id ? { ...book, title: input, pendingInput: input } : book)),
+  };
 }
 
 export function resolveQueuedBooks(board: Board, id: string, entries: BookInput[]): Board {
@@ -111,7 +122,10 @@ export function moveBook(board: Board, bookId: string, destination: string, inde
   locationOf(board, bookId);
   booksAt(board, destination);
   const gallery = board.gallery.filter((id) => id !== bookId);
-  const tiers = board.tiers.map((tier) => ({ ...tier, bookIds: tier.bookIds.filter((id) => id !== bookId) }));
+  const tiers = board.tiers.map((tier) => ({
+    ...tier,
+    bookIds: tier.bookIds.filter((id) => id !== bookId),
+  }));
   const result = { ...board, gallery, tiers };
   const target = booksAt(result, destination);
   const insertion = index ?? target.length;
@@ -132,7 +146,11 @@ export function clearRankings(board: Board): Board {
 
 export function clearGallery(board: Board): Board {
   const galleryIds = new Set(board.gallery);
-  return { ...board, books: board.books.filter((book) => !galleryIds.has(book.id)), gallery: [] };
+  return {
+    ...board,
+    books: board.books.filter((book) => !galleryIds.has(book.id)),
+    gallery: [],
+  };
 }
 
 export function removeBook(board: Board, bookId: string): Board {
@@ -141,7 +159,10 @@ export function removeBook(board: Board, bookId: string): Board {
     ...board,
     books: board.books.filter((book) => book.id !== bookId),
     gallery: board.gallery.filter((id) => id !== bookId),
-    tiers: board.tiers.map((tier) => ({ ...tier, bookIds: tier.bookIds.filter((id) => id !== bookId) })),
+    tiers: board.tiers.map((tier) => ({
+      ...tier,
+      bookIds: tier.bookIds.filter((id) => id !== bookId),
+    })),
   };
 }
 
@@ -150,29 +171,52 @@ export function updateBook(board: Board, bookId: string, changes: Pick<Book, 'ti
   const title = tidy(changes.title);
   const author = tidy(changes.author) || UNKNOWN_AUTHOR;
   if (!title) throw new Error('Book titles cannot be empty.');
-  return { ...board, books: board.books.map((book) => {
-    if (book.id !== bookId) return book;
-    const { pendingInput: _pendingInput, ...details } = book;
-    return { ...details, title, author };
-  }) };
+  return {
+    ...board,
+    books: board.books.map((book) => {
+      if (book.id !== bookId) return book;
+      const details = { ...book };
+      delete details.pendingInput;
+      return { ...details, title, author };
+    }),
+  };
 }
 
 export function addTier(board: Board): Board {
-  return { ...board, tiers: [...board.tiers, { id: `tier-${crypto.randomUUID()}`, name: 'New tier', color: '#c7c4ba', bookIds: [] }] };
+  return {
+    ...board,
+    tiers: [
+      ...board.tiers,
+      {
+        id: `tier-${crypto.randomUUID()}`,
+        name: 'New tier',
+        color: '#c7c4ba',
+        bookIds: [],
+      },
+    ],
+  };
 }
 
 export function updateTier(board: Board, id: string, changes: { name?: string; color?: string }): Board {
   if (!board.tiers.some((tier) => tier.id === id)) throw new Error('Tier not found.');
   if (changes.name !== undefined && !tidy(changes.name)) throw new Error('Tier names cannot be empty.');
-  if (changes.color !== undefined && !/^#[0-9a-f]{6}$/iu.test(changes.color)) throw new Error('Choose a valid tier color.');
-  return { ...board, tiers: board.tiers.map((tier) => tier.id === id ? { ...tier, ...changes } : tier) };
+  if (changes.color !== undefined && !/^#[0-9a-f]{6}$/iu.test(changes.color))
+    throw new Error('Choose a valid tier color.');
+  return {
+    ...board,
+    tiers: board.tiers.map((tier) => (tier.id === id ? { ...tier, ...changes } : tier)),
+  };
 }
 
 export function deleteTier(board: Board, id: string): Board {
   if (board.tiers.length === 1) throw new Error('Keep at least one tier.');
   const tier = board.tiers.find((item) => item.id === id);
   if (!tier) throw new Error('Tier not found.');
-  return { ...board, gallery: [...board.gallery, ...tier.bookIds], tiers: board.tiers.filter((item) => item.id !== id) };
+  return {
+    ...board,
+    gallery: [...board.gallery, ...tier.bookIds],
+    tiers: board.tiers.filter((item) => item.id !== id),
+  };
 }
 
 export function reorderTier(board: Board, id: string, offset: -1 | 1): Board {

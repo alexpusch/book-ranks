@@ -95,7 +95,10 @@ function parseBooks(response: string): BookInput[] {
   if (!isRecord(result) || !Array.isArray(result.books) || !result.books.every(isBookInput)) {
     throw new Error('Chrome AI returned invalid book details. Your text has been kept; please try again.');
   }
-  return result.books.map((book) => ({ title: tidy(book.title), author: tidy(book.author) }));
+  return result.books.map((book) => ({
+    title: tidy(book.title),
+    author: tidy(book.author),
+  }));
 }
 
 function splitText(text: string): string[] {
@@ -106,7 +109,7 @@ function splitText(text: string): string[] {
   let chunk = '';
   for (const paragraph of paragraphs) {
     // Keep title/author stanzas together; only split oversized paragraphs into lines.
-    const parts = paragraph.length <= limit ? [paragraph] : paragraph.match(/[^\n]*\n|[^\n]+$/gu) ?? [];
+    const parts = paragraph.length <= limit ? [paragraph] : (paragraph.match(/[^\n]*\n|[^\n]+$/gu) ?? []);
     for (let part of parts) {
       while (part.length > limit) {
         if (chunk) {
@@ -136,7 +139,10 @@ export async function extractBooks(
 ): Promise<BookInput[]> {
   if (!text.trim()) throw new Error('Enter at least one book title.');
   // Keep Audible's supplied short title and full author line, not its duplicate expanded heading.
-  const prepared = text.replace(/^(.+) By ([^\r\n]+)\r?\n\1(?::[^\r\n]*|[ \t]+\([^\r\n]*\))?\r?\n(?=By: \2(?:,|\r?$))/gmu, '$1\n');
+  const prepared = text.replace(
+    /^(.+) By ([^\r\n]+)\r?\n\1(?::[^\r\n]*|[ \t]+\([^\r\n]*\))?\r?\n(?=By: \2(?:,|\r?$))/gmu,
+    '$1\n',
+  );
   const chunks = splitText(prepared);
   const libraryInput = /^Narrated by:/mu.test(text) && /^By:/mu.test(text);
   const promptInstructions = instructions + (libraryInput ? libraryInstructions : '');
@@ -145,18 +151,38 @@ export async function extractBooks(
     signal.throwIfAborted();
     const chunkSignal = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
     const expectedCount = libraryInput ? [...chunk.matchAll(/^By:[ \t]+\S/gmu)].length : undefined;
-    const responseSchema = expectedCount === undefined ? schema : {
-      ...schema, properties: { books: { ...schema.properties.books, minItems: expectedCount, maxItems: expectedCount } },
-    };
-    const response = await requestBookPrompt(chunk, promptInstructions, responseSchema, onStatus, chunkSignal,
-      chunks.length === 1 ? 'Extracting and normalizing books with Chrome AI...'
-        : `Extracting books with Chrome AI: part ${index + 1} of ${chunks.length}...`);
+    const responseSchema =
+      expectedCount === undefined
+        ? schema
+        : {
+            ...schema,
+            properties: {
+              books: {
+                ...schema.properties.books,
+                minItems: expectedCount,
+                maxItems: expectedCount,
+              },
+            },
+          };
+    const response = await requestBookPrompt(
+      chunk,
+      promptInstructions,
+      responseSchema,
+      onStatus,
+      chunkSignal,
+      chunks.length === 1
+        ? 'Extracting and normalizing books with Chrome AI...'
+        : `Extracting books with Chrome AI: part ${index + 1} of ${chunks.length}...`,
+    );
     const entries = parseBooks(response);
     if (expectedCount !== undefined && entries.length !== expectedCount) {
-      throw new Error(`Chrome AI returned ${entries.length} books for a library section containing ${expectedCount} entries. Your text has been kept; please retry.`);
+      throw new Error(
+        `Chrome AI returned ${entries.length} books for a library section containing ${expectedCount} entries. Your text has been kept; please retry.`,
+      );
     }
     books.push(...entries);
   }
-  if (!books.length) throw new Error('No books could be identified. Include book titles and any known authors, then try again.');
+  if (!books.length)
+    throw new Error('No books could be identified. Include book titles and any known authors, then try again.');
   return books;
 }

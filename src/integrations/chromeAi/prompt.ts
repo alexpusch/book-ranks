@@ -6,7 +6,9 @@ interface ModelSession {
 interface ModelOptions {
   initialPrompts: { role: 'system'; content: string }[];
   signal: AbortSignal;
-  monitor: (monitor: { addEventListener(type: 'downloadprogress', listener: (event: { loaded: number }) => void): void }) => void;
+  monitor: (monitor: {
+    addEventListener(type: 'downloadprogress', listener: (event: { loaded: number }) => void): void;
+  }) => void;
 }
 
 export interface BookLanguageModel {
@@ -30,7 +32,9 @@ export function getModelDownloadProgress(): number | null {
 
 export function subscribeModelDownload(listener: () => void): () => void {
   downloadListeners.add(listener);
-  return () => { downloadListeners.delete(listener); };
+  return () => {
+    downloadListeners.delete(listener);
+  };
 }
 
 function setModelDownloadProgress(progress: number | null) {
@@ -40,12 +44,18 @@ function setModelDownloadProgress(progress: number | null) {
 }
 
 export async function requestBookPrompt(
-  input: string, instructions: string, schema: object,
-  onStatus: (status: string) => void, signal: AbortSignal, status: string,
+  input: string,
+  instructions: string,
+  schema: object,
+  onStatus: (status: string) => void,
+  signal: AbortSignal,
+  status: string,
 ): Promise<string> {
   const previous = promptTail;
   let release!: () => void;
-  promptTail = new Promise<void>((resolve) => { release = resolve; });
+  promptTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   try {
     await previous;
     signal.throwIfAborted();
@@ -56,20 +66,32 @@ export async function requestBookPrompt(
 }
 
 async function runPrompt(
-  input: string, instructions: string, schema: object,
-  onStatus: (status: string) => void, signal: AbortSignal, status: string,
+  input: string,
+  instructions: string,
+  schema: object,
+  onStatus: (status: string) => void,
+  signal: AbortSignal,
+  status: string,
 ): Promise<string> {
   const model = window.LanguageModel;
   if (!model) {
-    throw new Error('Chrome built-in AI is not available. Use an up-to-date desktop Chrome with the Prompt API enabled on a supported device, over HTTPS or localhost.');
+    throw new Error(
+      'Chrome built-in AI is not available. Use an up-to-date desktop Chrome with the Prompt API enabled on a supported device, over HTTPS or localhost.',
+    );
   }
   onStatus('Checking Chrome AI availability...');
   const availability = await model.availability();
   signal.throwIfAborted();
   if (availability === 'unavailable') {
-    throw new Error('Chrome AI is unavailable on this device. Check Chrome model support, free disk space, and built-in AI settings.');
+    throw new Error(
+      'Chrome AI is unavailable on this device. Check Chrome model support, free disk space, and built-in AI settings.',
+    );
   }
-  onStatus(availability === 'available' ? 'Preparing Chrome AI...' : 'Downloading Chrome AI model. The first use may take a while...');
+  onStatus(
+    availability === 'available'
+      ? 'Preparing Chrome AI...'
+      : 'Downloading Chrome AI model. The first use may take a while...',
+  );
   const downloading = availability === 'downloadable' || availability === 'downloading';
   let downloadActive = downloading;
   const clearDownload = () => {
@@ -97,7 +119,10 @@ async function runPrompt(
     clearDownload();
     signal.throwIfAborted();
     onStatus(status);
-    const response = await session.prompt(input, { responseConstraint: schema, signal });
+    const response = await session.prompt(input, {
+      responseConstraint: schema,
+      signal,
+    });
     signal.throwIfAborted();
     return response;
   } finally {

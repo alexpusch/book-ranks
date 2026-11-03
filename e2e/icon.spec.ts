@@ -4,9 +4,21 @@ test('the production app serves its browser and home-screen icons', async ({ pag
   await page.goto('/');
 
   const icons = [
-    { selector: 'link[rel="icon"][type="image/svg+xml"]', type: 'image/svg+xml', size: 32 },
-    { selector: 'link[rel="icon"][type="image/png"][sizes="32x32"]', type: 'image/png', size: 32 },
-    { selector: 'link[rel="apple-touch-icon"][sizes="180x180"]', type: 'image/png', size: 180 },
+    {
+      selector: 'link[rel="icon"][type="image/svg+xml"]',
+      type: 'image/svg+xml',
+      size: 32,
+    },
+    {
+      selector: 'link[rel="icon"][type="image/png"][sizes="32x32"]',
+      type: 'image/png',
+      size: 32,
+    },
+    {
+      selector: 'link[rel="apple-touch-icon"][sizes="180x180"]',
+      type: 'image/png',
+      size: 180,
+    },
   ];
 
   for (const icon of icons) {

@@ -12,7 +12,10 @@ export function useEditions(workId: string | undefined, book: Pick<Book, 'title'
     setEditionWork(null);
     setEditionError('');
     setEditionBusy(false);
-    return () => { editionController.current?.abort(); editionController.current = null; };
+    return () => {
+      editionController.current?.abort();
+      editionController.current = null;
+    };
   }, [workId]);
   async function loadEditions() {
     if (!workId || editionController.current) return;
@@ -21,16 +24,25 @@ export function useEditions(workId: string | undefined, book: Pick<Book, 'title'
     setEditionBusy(true);
     setEditionError('');
     try {
-      const page = await openLibraryClient.editions({
-        workId, cursor: editionWork?.nextCursor ?? '0',
-      }, controller.signal);
+      const page = await openLibraryClient.editions(
+        {
+          workId,
+          cursor: editionWork?.nextCursor ?? '0',
+        },
+        controller.signal,
+      );
       controller.signal.throwIfAborted();
       setEditionWork((current) => ({
-        id: workId, title: book.title, authors: [book.author],
-        covers: [], editions: [...(current?.editions ?? []), ...page.editions], nextCursor: page.nextCursor,
+        id: workId,
+        title: book.title,
+        authors: [book.author],
+        covers: [],
+        editions: [...(current?.editions ?? []), ...page.editions],
+        nextCursor: page.nextCursor,
       }));
     } catch (error) {
-      if (!controller.signal.aborted) setEditionError(error instanceof Error ? error.message : 'Edition search failed.');
+      if (!controller.signal.aborted)
+        setEditionError(error instanceof Error ? error.message : 'Edition search failed.');
     } finally {
       if (editionController.current === controller) {
         editionController.current = null;

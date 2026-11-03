@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { UNKNOWN_AUTHOR, importBooks, resolveQueuedBooks, updateBook, type Board, type BoardChange, type Book, type BookInput } from '../board/board';
+import {
+  UNKNOWN_AUTHOR,
+  importBooks,
+  resolveQueuedBooks,
+  updateBook,
+  type Board,
+  type BoardChange,
+  type Book,
+  type BookInput,
+} from '../board/board';
 import type { CoverSelection } from '../board/coverSelection';
 import { openLibraryClient } from '../integrations/openLibrary/client';
 import { normalize, type WorkCandidate } from '../integrations/openLibrary/types';
@@ -8,7 +17,10 @@ import { extractBooks } from './extraction';
 import { lookupIdentity, type LookupState } from './lookupState';
 
 interface LookupItem {
-  book: Book; identity: string; controller: AbortController; manualEntry: boolean;
+  book: Book;
+  identity: string;
+  controller: AbortController;
+  manualEntry: boolean;
 }
 
 export function useBookResolution(board: Board, onChange: BoardChange) {
@@ -49,7 +61,9 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
           requests.current.delete(id);
           continue;
         }
-        publish(id, { outcome: item.book.pendingInput !== undefined ? 'extracting' : 'loading' });
+        publish(id, {
+          outcome: item.book.pendingInput !== undefined ? 'extracting' : 'loading',
+        });
         try {
           const manualEntry = item.manualEntry;
           if (item.book.pendingInput !== undefined) {
@@ -64,7 +78,10 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
             item.book = next.books.find((book) => book.id === id)!;
             item.identity = lookupIdentity(item.book);
             identities.current.set(id, item.identity);
-            lookup(next.books.filter((book) => !existingIds.has(book.id)), false);
+            lookup(
+              next.books.filter((book) => !existingIds.has(book.id)),
+              false,
+            );
             if (item.book.coverSelection) {
               publish(id, { outcome: 'matched', works: [] });
               continue;
@@ -74,39 +91,79 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
           const signal = AbortSignal.any([item.controller.signal, AbortSignal.timeout(180_000)]);
           const { works, nextCursor } = await openLibraryClient.searchPage(item.book, signal);
           signal.throwIfAborted();
-          const exactMatch = manualEntry && item.book.author !== UNKNOWN_AUTHOR
-            ? works.find((work) => normalize(work.title) === normalize(item.book.title)
-              && normalize(work.authors.join(', ')) === normalize(item.book.author))
-            : undefined;
+          const exactMatch =
+            manualEntry && item.book.author !== UNKNOWN_AUTHOR
+              ? works.find(
+                  (work) =>
+                    normalize(work.title) === normalize(item.book.title) &&
+                    normalize(work.authors.join(', ')) === normalize(item.book.author),
+                )
+              : undefined;
           if (manualEntry && works.length > 1 && !exactMatch) {
             if (alive.current && requests.current.get(id) === item && boardRef.current.books.some(isCurrent)) {
-              publish(id, { outcome: 'needs-review', works, nextSearchCursor: nextCursor });
+              publish(id, {
+                outcome: 'needs-review',
+                works,
+                nextSearchCursor: nextCursor,
+              });
             }
             continue;
           }
-          const match = exactMatch ?? await matchBook({
-            title: item.book.title, author: item.book.author === UNKNOWN_AUTHOR ? '' : item.book.author,
-          }, works, signal);
+          const match =
+            exactMatch ??
+            (await matchBook(
+              {
+                title: item.book.title,
+                author: item.book.author === UNKNOWN_AUTHOR ? '' : item.book.author,
+              },
+              works,
+              signal,
+            ));
           signal.throwIfAborted();
           if (!alive.current) return;
           if (requests.current.get(id) !== item || !boardRef.current.books.some(isCurrent)) continue;
           if (!match) {
-            publish(id, { outcome: works.length ? 'needs-review' : 'not-found', works, nextSearchCursor: nextCursor });
+            publish(id, {
+              outcome: works.length ? 'needs-review' : 'not-found',
+              works,
+              nextSearchCursor: nextCursor,
+            });
             continue;
           }
           const selection: CoverSelection | undefined = match.covers.length
-            ? { kind: 'open-library', workId: match.id, ...match.covers[0] } : undefined;
-          let next = updateBook(boardRef.current, id, { title: match.title, author: match.authors.join(', ') });
-          next = { ...next, books: next.books.map((book) => book.id === id
-            ? { ...book, matchedWorkId: match.id, coverSelection: book.coverSelection ?? selection } : book) };
+            ? { kind: 'open-library', workId: match.id, ...match.covers[0] }
+            : undefined;
+          let next = updateBook(boardRef.current, id, {
+            title: match.title,
+            author: match.authors.join(', '),
+          });
+          next = {
+            ...next,
+            books: next.books.map((book) =>
+              book.id === id
+                ? {
+                    ...book,
+                    matchedWorkId: match.id,
+                    coverSelection: book.coverSelection ?? selection,
+                  }
+                : book,
+            ),
+          };
           if (!onChange(() => next)) throw new Error('Could not save the matched book.');
           boardRef.current = next;
           identities.current.set(id, lookupIdentity(next.books.find((book) => book.id === id)!));
-          publish(id, { outcome: selection ? 'matched' : 'needs-review', works: [match], selection });
+          publish(id, {
+            outcome: selection ? 'matched' : 'needs-review',
+            works: [match],
+            selection,
+          });
         } catch (error) {
           if (alive.current && requests.current.get(id) === item && boardRef.current.books.some(isCurrent)) {
-            publish(id, { outcome: 'error', works: [],
-              error: error instanceof Error ? error.message : 'Cover lookup failed.' });
+            publish(id, {
+              outcome: 'error',
+              works: [],
+              error: error instanceof Error ? error.message : 'Cover lookup failed.',
+            });
           }
         } finally {
           if (requests.current.get(id) === item) requests.current.delete(id);
@@ -120,8 +177,12 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
     for (const book of books) {
       if (requests.current.has(book.id)) continue;
       const identity = lookupIdentity(book);
-      const item = { book, identity, controller: new AbortController(),
-        manualEntry: manualEntry && book.pendingInput === undefined };
+      const item = {
+        book,
+        identity,
+        controller: new AbortController(),
+        manualEntry: manualEntry && book.pendingInput === undefined,
+      };
       requests.current.set(book.id, item);
       identities.current.set(book.id, identity);
       queue.current.push(item);
@@ -136,10 +197,17 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
       requests.current.get(id)?.controller.abort();
       requests.current.delete(id);
       identities.current.delete(id);
-      const next = { ...statesRef.current };
-      delete next[id]; statesRef.current = next; setStates(next);
+      const { [id]: _removed, ...next } = statesRef.current;
+      statesRef.current = next;
+      setStates(next);
     }
-    lookup(board.books.filter((book) => (book.pendingInput !== undefined || (!book.coverSelection && !book.matchedWorkId)) && !statesRef.current[book.id]));
+    lookup(
+      board.books.filter(
+        (book) =>
+          (book.pendingInput !== undefined || (!book.coverSelection && !book.matchedWorkId)) &&
+          !statesRef.current[book.id],
+      ),
+    );
   }, [board.books]);
 
   function retry(id: string) {
@@ -149,11 +217,14 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
   function addAiBooks(entries: BookInput[]): boolean {
     let next = boardRef.current;
     let added: Book[] = [];
-    if (!onChange((current) => {
-      next = importBooks(current, entries);
-      added = next.books.slice(current.books.length);
-      return next;
-    })) return false;
+    if (
+      !onChange((current) => {
+        next = importBooks(current, entries);
+        added = next.books.slice(current.books.length);
+        return next;
+      })
+    )
+      return false;
     boardRef.current = next;
     lookup(added, false);
     return true;
@@ -172,8 +243,9 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
         requests.current.get(id)?.controller.abort();
         requests.current.delete(id);
         identities.current.set(id, lookupIdentity(updated));
-        const nextStates = { ...statesRef.current };
-        delete nextStates[id]; statesRef.current = nextStates; setStates(nextStates);
+        const { [id]: _removed, ...nextStates } = statesRef.current;
+        statesRef.current = nextStates;
+        setStates(nextStates);
         if (retry || !updated.coverSelection) lookup([updated]);
       }
       return null;
@@ -186,19 +258,38 @@ export function useBookResolution(board: Board, onChange: BoardChange) {
       requests.current.get(selected.id)?.controller.abort();
       requests.current.delete(selected.id);
       const state = statesRef.current[selected.id];
-      publish(selected.id, { outcome: 'matched', works: state && 'works' in state ? state.works : [] });
+      publish(selected.id, {
+        outcome: 'matched',
+        works: state && 'works' in state ? state.works : [],
+      });
     }
-    onChange((current) => ({ ...current, books: current.books.map((book) =>
-      book.id === selected.id ? { ...book, coverSelection: selection } : book) }));
+    onChange((current) => ({
+      ...current,
+      books: current.books.map((book) => (book.id === selected.id ? { ...book, coverSelection: selection } : book)),
+    }));
   }
   function selectWork(id: string, work: WorkCandidate): string | null {
     try {
-      let next = updateBook(boardRef.current, id, { title: work.title, author: work.authors.join(', ') });
+      let next = updateBook(boardRef.current, id, {
+        title: work.title,
+        author: work.authors.join(', '),
+      });
       const cover = work.covers[0];
       const selection: CoverSelection | undefined = cover
-        ? { kind: 'open-library', workId: work.id, ...cover } : undefined;
-      next = { ...next, books: next.books.map((book) => book.id === id
-        ? { ...book, matchedWorkId: work.id, coverSelection: book.coverSelection ?? selection } : book) };
+        ? { kind: 'open-library', workId: work.id, ...cover }
+        : undefined;
+      next = {
+        ...next,
+        books: next.books.map((book) =>
+          book.id === id
+            ? {
+                ...book,
+                matchedWorkId: work.id,
+                coverSelection: book.coverSelection ?? selection,
+              }
+            : book,
+        ),
+      };
       if (!onChange(() => next)) return 'Could not save the matched book. Please try again.';
       boardRef.current = next;
       requests.current.get(id)?.controller.abort();

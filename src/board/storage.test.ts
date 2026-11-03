@@ -11,25 +11,50 @@ describe('browser persistence', () => {
     saveBoard(board);
     expect(loadBoard()).toMatchObject({ board, blocked: false });
     for (const pendingInput of [null, 12, '', '  ', 'different input']) {
-      expect(() => validateBoard({ ...board, books: [{ ...board.books[0], pendingInput }] })).toThrow('pending book');
+      expect(() =>
+        validateBoard({
+          ...board,
+          books: [{ ...board.books[0], pendingInput }],
+        }),
+      ).toThrow('pending book');
     }
-    expect(() => validateBoard({ ...board, books: [{ ...board.books[0], matchedWorkId: 'OL1W' }] })).toThrow('pending book');
+    expect(() =>
+      validateBoard({
+        ...board,
+        books: [{ ...board.books[0], matchedWorkId: 'OL1W' }],
+      }),
+    ).toThrow('pending book');
   });
 
   it('round-trips local artwork and rejects unsafe or oversized local cover sources', () => {
     const board = importBooks(createBoard(), 'Dune');
-    const selection = { kind: 'local' as const, dataUrl: 'data:image/jpeg;base64,Y292ZXI=' };
+    const selection = {
+      kind: 'local' as const,
+      dataUrl: 'data:image/jpeg;base64,Y292ZXI=',
+    };
     board.books[0].coverSelection = selection;
     saveBoard(board);
     expect(loadBoard()).toMatchObject({ board, blocked: false });
-    for (const dataUrl of ['https://example.com/cover.jpg', 'data:image/svg+xml;base64,PHN2Zz4=', '',
-      `data:image/jpeg;base64,${'A'.repeat(MAX_LOCAL_COVER_LENGTH)}`]) {
-      expect(() => validateBoard({ ...board, books: [{ ...board.books[0], coverSelection: { kind: 'local', dataUrl } }] }))
-        .toThrow('cover selection');
+    for (const dataUrl of [
+      'https://example.com/cover.jpg',
+      'data:image/svg+xml;base64,PHN2Zz4=',
+      '',
+      `data:image/jpeg;base64,${'A'.repeat(MAX_LOCAL_COVER_LENGTH)}`,
+    ]) {
+      expect(() =>
+        validateBoard({
+          ...board,
+          books: [{ ...board.books[0], coverSelection: { kind: 'local', dataUrl } }],
+        }),
+      ).toThrow('cover selection');
     }
   });
   it('starts empty and round-trips the complete board', () => {
-    expect(loadBoard()).toEqual({ board: createBoard(), warning: null, blocked: false });
+    expect(loadBoard()).toEqual({
+      board: createBoard(),
+      warning: null,
+      blocked: false,
+    });
     let board = importBooks(createBoard(), 'Dune | Frank Herbert\nPiranesi');
     board = moveBook(board, board.gallery[0], board.tiers[0].id);
     saveBoard(board);
@@ -37,9 +62,13 @@ describe('browser persistence', () => {
   });
 
   it.each(['not json', '{"version":2}', 'null', '{"version":1,"books":[],"tiers":[]}'])(
-    'blocks persistence of invalid saved data %s', (raw) => {
+    'blocks persistence of invalid saved data %s',
+    (raw) => {
       localStorage.setItem(STORAGE_KEY, raw);
-      expect(loadBoard()).toMatchObject({ blocked: true, warning: expect.stringContaining('not been overwritten') });
+      expect(loadBoard()).toMatchObject({
+        blocked: true,
+        warning: expect.stringContaining('not been overwritten'),
+      });
       expect(localStorage.getItem(STORAGE_KEY)).toBe(raw);
     },
   );
@@ -63,10 +92,17 @@ describe('browser persistence', () => {
   });
 
   it('surfaces read and write failures and supports explicit recovery', () => {
-    const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Denied'); });
-    expect(loadBoard()).toMatchObject({ blocked: true, warning: expect.stringContaining('Denied') });
+    const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('Denied');
+    });
+    expect(loadBoard()).toMatchObject({
+      blocked: true,
+      warning: expect.stringContaining('Denied'),
+    });
     read.mockRestore();
-    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Quota exceeded');
+    });
     expect(() => saveBoard(createBoard())).toThrow('Quota exceeded');
     expect(() => resetSavedBoard()).toThrow('Quota exceeded');
     write.mockRestore();

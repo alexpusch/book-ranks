@@ -2,7 +2,8 @@ import { expect, test } from './fixtures';
 
 const canonicalUrl = 'https://alexpusch.github.io/book-ranks/';
 const title = 'Free Book Tier List Maker & Book Ranking | Book ranks';
-const description = 'Create a free book tier list with cover art. Rank your favorite books, customize tiers, and download your book rankings as a JPEG. No account needed.';
+const description =
+  'Create a free book tier list with cover art. Rank your favorite books, customize tiers, and download your book rankings as a JPEG. No account needed.';
 
 test('search metadata is available without JavaScript and no SEO footer is included', async ({ browser, request }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });

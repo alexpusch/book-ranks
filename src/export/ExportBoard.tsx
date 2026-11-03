@@ -11,10 +11,17 @@ export function ExportBoard({ board }: { board: Board }) {
         {board.tiers.map((tier) => (
           <section key={tier.id} className="tier-row">
             <div className="tier-label" style={{ backgroundColor: tier.color }}>
-              <h3>{tier.name}</h3><span>{tier.bookIds.length} {tier.bookIds.length === 1 ? 'book' : 'books'}</span>
+              <h3>{tier.name}</h3>
+              <span>
+                {tier.bookIds.length} {tier.bookIds.length === 1 ? 'book' : 'books'}
+              </span>
             </div>
             <div className="book-zone tier-zone">
-              {tier.bookIds.map((id) => <article className="book-card" key={id}><BookContent book={books.get(id)!} /></article>)}
+              {tier.bookIds.map((id) => (
+                <article className="book-card" key={id}>
+                  <BookContent book={books.get(id)!} />
+                </article>
+              ))}
             </div>
           </section>
         ))}

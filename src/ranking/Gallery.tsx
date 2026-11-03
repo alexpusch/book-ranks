@@ -12,8 +12,9 @@ export function Gallery({ onClear, ...props }: BoardProps & { onClear: () => voi
     previousBookIds.current = new Set(props.board.books.map((book) => book.id));
     if (!addedId) return;
     const zone = sectionRef.current?.querySelector<HTMLElement>('[data-zone="gallery"]');
-    const card = Array.from(zone?.querySelectorAll<HTMLElement>('[data-book-id]') ?? [])
-      .find((element) => element.dataset.bookId === addedId);
+    const card = Array.from(zone?.querySelectorAll<HTMLElement>('[data-book-id]') ?? []).find(
+      (element) => element.dataset.bookId === addedId,
+    );
     if (!zone || !card) return;
     const zoneBounds = zone.getBoundingClientRect();
     const cardBounds = card.getBoundingClientRect();
@@ -37,10 +38,22 @@ export function Gallery({ onClear, ...props }: BoardProps & { onClear: () => voi
   return (
     <>
       <div className="gallery-toolbar" role="group" aria-label="Unranked book actions">
-        <button className="clear-books-button" type="button" disabled={props.board.gallery.length === 0}
-          onClick={onClear}>
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor"
-            strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+        <button
+          className="clear-books-button"
+          type="button"
+          disabled={props.board.gallery.length === 0}
+          onClick={onClear}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            aria-hidden="true"
+          >
             <path d="m6 6 12 12M18 6 6 18" />
           </svg>
           Clear all

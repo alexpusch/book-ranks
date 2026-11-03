@@ -1,14 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { extractBooks } from './extraction';
-import { getModelDownloadProgress, subscribeModelDownload, type BookLanguageModel } from '../integrations/chromeAi/prompt';
+import {
+  getModelDownloadProgress,
+  subscribeModelDownload,
+  type BookLanguageModel,
+} from '../integrations/chromeAi/prompt';
 
-const prompt = vi.fn<(input: string, options: { responseConstraint: object; signal: AbortSignal }) => Promise<string>>();
+const prompt =
+  vi.fn<(input: string, options: { responseConstraint: object; signal: AbortSignal }) => Promise<string>>();
 const destroy = vi.fn();
 const create = vi.fn<BookLanguageModel['create']>();
 const availability = vi.fn<BookLanguageModel['availability']>();
 
 beforeEach(() => {
-  prompt.mockReset().mockResolvedValue(JSON.stringify({ books: [{ title: ' Dune ', author: ' Frank   Herbert ' }] }));
+  prompt.mockReset().mockResolvedValue(
+    JSON.stringify({
+      books: [{ title: ' Dune ', author: ' Frank   Herbert ' }],
+    }),
+  );
   destroy.mockReset();
   create.mockReset().mockResolvedValue({ prompt, destroy });
   availability.mockReset().mockResolvedValue('available');
@@ -18,13 +27,26 @@ beforeEach(() => {
 describe('Chrome book extraction', () => {
   it('sends unstructured text unchanged with sanitation instructions and a structured output schema', async () => {
     const input = 'My list:\n1. The Spear Cuts Through Water: A Novel\nby Simon Jimenez';
-    prompt.mockResolvedValueOnce(JSON.stringify({ books: [{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }] }));
+    prompt.mockResolvedValueOnce(
+      JSON.stringify({
+        books: [{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }],
+      }),
+    );
     const signal = new AbortController().signal;
-    expect(await extractBooks(input, vi.fn(), signal)).toEqual([{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }]);
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      signal: expect.any(AbortSignal),
-      initialPrompts: [{ role: 'system', content: expect.stringContaining('Extract search-ready book titles and author names') }],
-    }));
+    expect(await extractBooks(input, vi.fn(), signal)).toEqual([
+      { title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' },
+    ]);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        initialPrompts: [
+          {
+            role: 'system',
+            content: expect.stringContaining('Extract search-ready book titles and author names'),
+          },
+        ],
+      }),
+    );
     expect(prompt).toHaveBeenCalledWith(input, {
       signal: expect.any(AbortSignal),
       responseConstraint: expect.objectContaining({ required: ['books'] }),
@@ -48,27 +70,41 @@ describe('Chrome book extraction', () => {
   });
 
   it('tidies extracted names and preserves missing authors and title punctuation', async () => {
-    expect(await extractBooks('some books', vi.fn(), new AbortController().signal)).toEqual([{ title: 'Dune', author: 'Frank Herbert' }]);
+    expect(await extractBooks('some books', vi.fn(), new AbortController().signal)).toEqual([
+      { title: 'Dune', author: 'Frank Herbert' },
+    ]);
     prompt.mockResolvedValueOnce(JSON.stringify({ books: [{ title: 'Title | Subtitle', author: '' }] }));
-    expect(await extractBooks('some books', vi.fn(), new AbortController().signal)).toEqual([{ title: 'Title | Subtitle', author: '' }]);
+    expect(await extractBooks('some books', vi.fn(), new AbortController().signal)).toEqual([
+      { title: 'Title | Subtitle', author: '' },
+    ]);
   });
 
   it('extracts all 50 entries from a long Audible-style paste in bounded, ordered chunks', async () => {
     const entries = Array.from({ length: 50 }, (_, index) => ({
-      title: `Library Book ${index + 1}`, author: `Author ${index + 1}`,
+      title: `Library Book ${index + 1}`,
+      author: `Author ${index + 1}`,
     }));
-    const text = entries.map(({ title, author }) =>
-      `${title} By ${author}\n${title}: A Novel\nBy: ${author}\nNarrated by: Someone Else\n` +
-      `interactive rating stars Write a review\n${'Retailer description. '.repeat(35)}\n\nListen now\n\nDownload\n`,
-    ).join('');
-    prompt.mockImplementation(async (chunk: string) => JSON.stringify({
-      books: [...chunk.matchAll(/^(Library Book \d+)\nBy: (Author \d+)$/gmu)]
-        .map((match) => ({ title: match[1], author: match[2] })),
-    }));
+    const text = entries
+      .map(
+        ({ title, author }) =>
+          `${title} By ${author}\n${title}: A Novel\nBy: ${author}\nNarrated by: Someone Else\n` +
+          `interactive rating stars Write a review\n${'Retailer description. '.repeat(35)}\n\nListen now\n\nDownload\n`,
+      )
+      .join('');
+    prompt.mockImplementation(async (chunk: string) =>
+      JSON.stringify({
+        books: [...chunk.matchAll(/^(Library Book \d+)\nBy: (Author \d+)$/gmu)].map((match) => ({
+          title: match[1],
+          author: match[2],
+        })),
+      }),
+    );
     expect(await extractBooks(text, vi.fn(), new AbortController().signal)).toEqual(entries);
     expect(prompt.mock.calls.length).toBeGreaterThan(1);
     const chunks = prompt.mock.calls.map(([chunk]) => chunk);
-    expect(chunks.join('')).toBe(text.replace(/^(Library Book \d+) By Author \d+\nLibrary Book \d+: A Novel\n/gmu, '$1\n'));
+    expect(chunks.join('')).toBe(
+      text.replace(/^(Library Book \d+) By Author \d+\nLibrary Book \d+: A Novel\n/gmu, '$1\n'),
+    );
     expect(chunks.every((chunk) => chunk.length <= 6_000)).toBe(true);
     for (const { title, author } of entries) {
       expect(chunks.filter((chunk) => chunk.includes(`${title}\nBy: ${author}`))).toHaveLength(1);
@@ -81,7 +117,8 @@ describe('Chrome book extraction', () => {
   });
 
   it('removes only proven duplicate Audible headings, preserving distinct entries and full author lines', async () => {
-    const text = 'Sample By Pen Name\nSample: A Novel\nBy: Pen Name, Full Name\n\n' +
+    const text =
+      'Sample By Pen Name\nSample: A Novel\nBy: Pen Name, Full Name\n\n' +
       'Dune By Frank Herbert\nDifferent Book\nBy: Frank Herbert\n\n' +
       'Dune By Frank Herbert\nDune Messiah\nBy: Frank Herbert\n\n' +
       'Sample: A Novel\nBy: Pen Name, Full Name';
@@ -92,7 +129,8 @@ describe('Chrome book extraction', () => {
   });
 
   it('constrains Audible output to every entry and rejects missing books instead of importing a partial library', async () => {
-    const text = 'Dune\nBy: Frank Herbert\nNarrated by: Someone\n\nPiranesi\nBy: Susanna Clarke\nNarrated by: Someone Else';
+    const text =
+      'Dune\nBy: Frank Herbert\nNarrated by: Someone\n\nPiranesi\nBy: Susanna Clarke\nNarrated by: Someone Else';
     await expect(extractBooks(text, vi.fn(), new AbortController().signal)).rejects.toThrow('containing 2 entries');
     expect(prompt.mock.calls[0][1].responseConstraint).toMatchObject({
       properties: { books: { minItems: 2, maxItems: 2 } },
@@ -117,8 +155,9 @@ describe('Chrome book extraction', () => {
   it('rejects the entire extraction when a later chunk fails', async () => {
     prompt.mockResolvedValueOnce('{"books":[{"title":"Dune","author":""}]}');
     prompt.mockResolvedValueOnce('invalid JSON');
-    await expect(extractBooks('Dune\n\n'.repeat(2_000), vi.fn(), new AbortController().signal))
-      .rejects.toThrow('invalid JSON');
+    await expect(extractBooks('Dune\n\n'.repeat(2_000), vi.fn(), new AbortController().signal)).rejects.toThrow(
+      'invalid JSON',
+    );
     expect(prompt).toHaveBeenCalledTimes(2);
   });
 
@@ -139,10 +178,14 @@ describe('Chrome book extraction', () => {
 
   it('reports unsupported browsers and unavailable devices without creating a session', async () => {
     vi.stubGlobal('LanguageModel', undefined);
-    await expect(extractBooks('Dune', vi.fn(), new AbortController().signal)).rejects.toThrow('up-to-date desktop Chrome');
+    await expect(extractBooks('Dune', vi.fn(), new AbortController().signal)).rejects.toThrow(
+      'up-to-date desktop Chrome',
+    );
     vi.stubGlobal('LanguageModel', { availability, create });
     availability.mockResolvedValueOnce('unavailable');
-    await expect(extractBooks('Dune', vi.fn(), new AbortController().signal)).rejects.toThrow('unavailable on this device');
+    await expect(extractBooks('Dune', vi.fn(), new AbortController().signal)).rejects.toThrow(
+      'unavailable on this device',
+    );
     expect(create).not.toHaveBeenCalled();
   });
 
@@ -151,7 +194,9 @@ describe('Chrome book extraction', () => {
     const progress: (number | null)[] = [];
     const unsubscribe = subscribeModelDownload(() => progress.push(getModelDownloadProgress()));
     create.mockImplementationOnce(async (options) => {
-      options.monitor({ addEventListener: (_type, listener) => listener({ loaded: 0.42 }) });
+      options.monitor({
+        addEventListener: (_type, listener) => listener({ loaded: 0.42 }),
+      });
       return { prompt, destroy };
     });
     const onStatus = vi.fn();
@@ -169,12 +214,14 @@ describe('Chrome book extraction', () => {
 
   it('ignores cached-model progress events', async () => {
     create.mockImplementationOnce(async (options) => {
-      options.monitor({ addEventListener: (_type, listener) => {
-        listener({ loaded: 0 });
-        expect(getModelDownloadProgress()).toBeNull();
-        listener({ loaded: 1 });
-        expect(getModelDownloadProgress()).toBeNull();
-      } });
+      options.monitor({
+        addEventListener: (_type, listener) => {
+          listener({ loaded: 0 });
+          expect(getModelDownloadProgress()).toBeNull();
+          listener({ loaded: 1 });
+          expect(getModelDownloadProgress()).toBeNull();
+        },
+      });
       return { prompt, destroy };
     });
     const onStatus = vi.fn();
@@ -186,14 +233,16 @@ describe('Chrome book extraction', () => {
     availability.mockResolvedValueOnce('downloadable');
     const controller = new AbortController();
     create.mockImplementationOnce(async (options) => {
-      options.monitor({ addEventListener: (_type, listener) => {
-        listener({ loaded: 0.42 });
-        expect(getModelDownloadProgress()).toBe(0.42);
-        controller.abort();
-        expect(getModelDownloadProgress()).toBeNull();
-        listener({ loaded: 0.6 });
-        expect(getModelDownloadProgress()).toBeNull();
-      } });
+      options.monitor({
+        addEventListener: (_type, listener) => {
+          listener({ loaded: 0.42 });
+          expect(getModelDownloadProgress()).toBe(0.42);
+          controller.abort();
+          expect(getModelDownloadProgress()).toBeNull();
+          listener({ loaded: 0.6 });
+          expect(getModelDownloadProgress()).toBeNull();
+        },
+      });
       return { prompt, destroy };
     });
     await expect(extractBooks('Dune', vi.fn(), controller.signal)).rejects.toThrow();

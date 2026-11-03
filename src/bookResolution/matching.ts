@@ -12,7 +12,9 @@ If the candidates are ambiguous or none is suitable, return {"workId":null}.
 Otherwise return only the chosen candidate's workId. Never invent identifiers or metadata.`;
 
 export async function matchBook(
-  input: BookInput, candidates: WorkCandidate[], signal: AbortSignal,
+  input: BookInput,
+  candidates: WorkCandidate[],
+  signal: AbortSignal,
 ): Promise<WorkCandidate | null> {
   if (!candidates.length) return null;
   const availability = await window.LanguageModel?.availability();
@@ -31,7 +33,10 @@ export async function matchBook(
         latestDate = date;
         selected = {
           ...candidate,
-          covers: edition.covers.map((cover) => ({ ...cover, editionId: edition.id })),
+          covers: edition.covers.map((cover) => ({
+            ...cover,
+            editionId: edition.id,
+          })),
           editions: page.editions,
           nextCursor: page.nextCursor,
         };
@@ -40,13 +45,26 @@ export async function matchBook(
     return selected;
   }
   const response = await requestBookPrompt(
-    JSON.stringify({ requested: input, candidates: candidates.map(({ id, title, authors }) => ({ workId: id, title, authors })) }),
+    JSON.stringify({
+      requested: input,
+      candidates: candidates.map(({ id, title, authors }) => ({
+        workId: id,
+        title,
+        authors,
+      })),
+    }),
     instructions,
     {
-      type: 'object', properties: { workId: { enum: [null, ...candidates.map(({ id }) => id)] } },
-      required: ['workId'], additionalProperties: false,
+      type: 'object',
+      properties: {
+        workId: { enum: [null, ...candidates.map(({ id }) => id)] },
+      },
+      required: ['workId'],
+      additionalProperties: false,
     },
-    () => undefined, signal, 'Matching Open Library results with Chrome AI...',
+    () => undefined,
+    signal,
+    'Matching Open Library results with Chrome AI...',
   );
   let result: unknown;
   try {
@@ -54,8 +72,8 @@ export async function matchBook(
   } catch {
     throw new Error('Chrome AI returned invalid JSON while matching books. Edit the book to retry.');
   }
-  if (!result || typeof result !== 'object' || !('workId' in result) ||
-    Object.keys(result).length !== 1) throw new Error('Chrome AI returned an invalid book match.');
+  if (!result || typeof result !== 'object' || !('workId' in result) || Object.keys(result).length !== 1)
+    throw new Error('Chrome AI returned an invalid book match.');
   if (result.workId === null) return null;
   const selected = candidates.find(({ id }) => id === result.workId);
   if (!selected) throw new Error('Chrome AI selected a work outside the search results.');

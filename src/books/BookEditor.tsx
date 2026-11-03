@@ -6,9 +6,18 @@ import { useEditions } from '../bookResolution/editions';
 import { useLocalCover } from './useLocalCover';
 import { CoverGallery, CoverOption } from './CoverGallery';
 
-export function BookEditor({ book, state, onSave, onSelect, onClose }: {
-  book: Book; state?: LookupState; onSave: (title: string, author: string) => string | null;
-  onSelect: (selection: CoverSelection) => void; onClose: () => void;
+export function BookEditor({
+  book,
+  state,
+  onSave,
+  onSelect,
+  onClose,
+}: {
+  book: Book;
+  state?: LookupState;
+  onSave: (title: string, author: string) => string | null;
+  onSelect: (selection: CoverSelection) => void;
+  onClose: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [title, setTitle] = useState(book.title);
@@ -18,101 +27,226 @@ export function BookEditor({ book, state, onSave, onSelect, onClose }: {
   const pasteTarget = useRef<HTMLDivElement>(null);
   const { selectImage, imageBusy, imageError, setImageError } = useLocalCover();
   const [pasteReady, setPasteReady] = useState(false);
-  useEffect(() => { if (pasteReady) pasteTarget.current?.focus(); }, [pasteReady]);
-  const workId = book.matchedWorkId ?? (book.coverSelection?.kind === 'open-library' ? book.coverSelection.workId : undefined);
+  useEffect(() => {
+    if (pasteReady) pasteTarget.current?.focus();
+  }, [pasteReady]);
+  const workId =
+    book.matchedWorkId ?? (book.coverSelection?.kind === 'open-library' ? book.coverSelection.workId : undefined);
   const { editionWork, editionBusy, editionError, loadEditions } = useEditions(workId, book);
   const previousBook = useRef(book);
   useEffect(() => {
     const previous = previousBook.current;
-    setTitle((title) => title === previous.title ? book.title : title);
-    setAuthor((author) => author === previous.author ? book.author : author);
+    setTitle((title) => (title === previous.title ? book.title : title));
+    setAuthor((author) => (author === previous.author ? book.author : author));
     previousBook.current = book;
   }, [book.title, book.author]);
   const backdropPress = useRef(false);
-  useEffect(() => { const element = dialog.current!; element.showModal(); return () => element.close(); }, []);
+  useEffect(() => {
+    const element = dialog.current!;
+    element.showModal();
+    return () => element.close();
+  }, []);
   function outsidePanel(x: number, y: number) {
     const bounds = dialog.current!.getBoundingClientRect();
     return x < bounds.left || x > bounds.right || y < bounds.top || y > bounds.bottom;
   }
-  return <dialog className="settings-drawer cover-chooser book-editor" ref={dialog} onCancel={onClose} aria-label="Book details"
-    onPaste={(event) => {
-      if (!pasteReady || imageBusy) return;
-      event.preventDefault();
-      const file = Array.from(event.clipboardData.files).find((file) => file.type.startsWith('image/'));
-      if (file) void selectImage(file, onSelect);
-      else setImageError('No image found on the clipboard. Copy an image and paste again, or upload a photo.');
-    }}
-    onPointerDown={(event) => { backdropPress.current = event.target === event.currentTarget && outsidePanel(event.clientX, event.clientY); }}
-    onClick={(event) => {
-      if (backdropPress.current && event.target === event.currentTarget && outsidePanel(event.clientX, event.clientY)) onClose();
-      backdropPress.current = false;
-    }}>
-    <button className="icon-button book-editor-close" aria-label="Close book editor" onClick={onClose}>
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
-        <path d="m6 6 12 12M18 6 6 18" />
-      </svg>
-    </button>
-    <form className="book-editor-form" onSubmit={(event) => {
-      event.preventDefault(); setError(onSave(title, author));
-    }}>
-      <input className="book-name-input" aria-label="Book name" placeholder="Book name" value={title}
-        onChange={(event) => setTitle(event.target.value)} required />
-      <input className="book-author-input" aria-label="Author" placeholder="Author name" value={author}
-        onChange={(event) => setAuthor(event.target.value)} />
-      {error && <p className="field-error" role="alert">{error}</p>}
-      <button className="primary-button" type="submit">Save</button>
-    </form>
-    <h3 className="cover-section-title">Choose cover</h3>
-    {workId && <button className="secondary-button" disabled={editionBusy || editionWork?.nextCursor === null}
-      onClick={() => void loadEditions()}>
-      {editionBusy ? 'Loading editions...' : editionError ? 'Retry edition search' : editionWork ? 'More editions and covers' : 'Find additional editions and covers'}
-    </button>}
-    {editionBusy && <p role="status">Looking up editions...</p>}
-    {editionError && <p role="alert">{editionError}</p>}
-    {editionWork?.nextCursor === null && <p>All available editions loaded.</p>}
-    {state && state.outcome !== 'extracting' && (book.pendingInput === undefined || state.outcome === 'error') && (state.outcome === 'queued' || state.outcome === 'loading'
-      ? <p role="status">{state.outcome === 'queued' ? 'Waiting for cover search...' : 'Looking up covers...'}</p> : <>
-      {state.warning && <p role="alert">{state.warning}</p>}
-      {state.outcome === 'error' && <p role="alert">{state.error}</p>}
-      {state.outcome === 'not-found' && <p>No matching works found</p>}
-      {state.outcome === 'needs-review' && <p>Review the works and editions before choosing artwork.</p>}
-    </>)}
-    <div className="cover-options" role="group" aria-label="Cover gallery">
-      {book.coverSelection?.kind === 'local' && <CoverOption selection={book.coverSelection}
-        current={book.coverSelection} label="your uploaded cover" onSelect={onSelect} />}
-      <CoverOption selection={{ kind: 'placeholder' }} current={book.coverSelection} label="placeholder cover" onSelect={onSelect} />
-      <CoverGallery works={[
-        ...(state && 'works' in state ? state.works : []),
-        ...(book.coverSelection?.kind === 'open-library' ? [{
-          id: book.coverSelection.workId, title: book.title, authors: [book.author],
-          covers: [{ coverId: book.coverSelection.coverId, editionId: book.coverSelection.editionId }],
-          editions: [], nextCursor: null,
-        }] : []),
-        ...(editionWork ? [editionWork] : []),
-      ]} current={book.coverSelection} onSelect={onSelect} />
-      <div className="cover-upload">
-        <strong>Your own cover</strong>
-        <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
-          aria-label="Cover photo" hidden onChange={(event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = '';
-            if (file) { setPasteReady(false); void selectImage(file, onSelect); }
-          }} />
-        <button type="button" className="secondary-button" disabled={imageBusy}
-          onClick={() => fileInput.current?.click()}>Upload photo</button>
-        <button type="button" className="secondary-button" disabled={imageBusy} aria-pressed={pasteReady}
-          onClick={() => { setImageError(''); setPasteReady(true); }}>Paste image</button>
-        <span>Images stay in this browser.</span>
+  return (
+    <dialog
+      className="settings-drawer cover-chooser book-editor"
+      ref={dialog}
+      onCancel={onClose}
+      aria-label="Book details"
+      onPaste={(event) => {
+        if (!pasteReady || imageBusy) return;
+        event.preventDefault();
+        const file = Array.from(event.clipboardData.files).find((file) => file.type.startsWith('image/'));
+        if (file) void selectImage(file, onSelect);
+        else setImageError('No image found on the clipboard. Copy an image and paste again, or upload a photo.');
+      }}
+      onPointerDown={(event) => {
+        backdropPress.current = event.target === event.currentTarget && outsidePanel(event.clientX, event.clientY);
+      }}
+      onClick={(event) => {
+        if (backdropPress.current && event.target === event.currentTarget && outsidePanel(event.clientX, event.clientY))
+          onClose();
+        backdropPress.current = false;
+      }}
+    >
+      <button className="icon-button book-editor-close" aria-label="Close book editor" onClick={onClose}>
+        <svg
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          aria-hidden="true"
+        >
+          <path d="m6 6 12 12M18 6 6 18" />
+        </svg>
+      </button>
+      <form
+        className="book-editor-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setError(onSave(title, author));
+        }}
+      >
+        <input
+          className="book-name-input"
+          aria-label="Book name"
+          placeholder="Book name"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          required
+        />
+        <input
+          className="book-author-input"
+          aria-label="Author"
+          placeholder="Author name"
+          value={author}
+          onChange={(event) => setAuthor(event.target.value)}
+        />
+        {error && (
+          <p className="field-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="primary-button" type="submit">
+          Save
+        </button>
+      </form>
+      <h3 className="cover-section-title">Choose cover</h3>
+      {workId && (
+        <button
+          className="secondary-button"
+          disabled={editionBusy || editionWork?.nextCursor === null}
+          onClick={() => void loadEditions()}
+        >
+          {editionBusy
+            ? 'Loading editions...'
+            : editionError
+              ? 'Retry edition search'
+              : editionWork
+                ? 'More editions and covers'
+                : 'Find additional editions and covers'}
+        </button>
+      )}
+      {editionBusy && <p role="status">Looking up editions...</p>}
+      {editionError && <p role="alert">{editionError}</p>}
+      {editionWork?.nextCursor === null && <p>All available editions loaded.</p>}
+      {state &&
+        state.outcome !== 'extracting' &&
+        (book.pendingInput === undefined || state.outcome === 'error') &&
+        (state.outcome === 'queued' || state.outcome === 'loading' ? (
+          <p role="status">{state.outcome === 'queued' ? 'Waiting for cover search...' : 'Looking up covers...'}</p>
+        ) : (
+          <>
+            {state.warning && <p role="alert">{state.warning}</p>}
+            {state.outcome === 'error' && <p role="alert">{state.error}</p>}
+            {state.outcome === 'not-found' && <p>No matching works found</p>}
+            {state.outcome === 'needs-review' && <p>Review the works and editions before choosing artwork.</p>}
+          </>
+        ))}
+      <div className="cover-options" role="group" aria-label="Cover gallery">
+        {book.coverSelection?.kind === 'local' && (
+          <CoverOption
+            selection={book.coverSelection}
+            current={book.coverSelection}
+            label="your uploaded cover"
+            onSelect={onSelect}
+          />
+        )}
+        <CoverOption
+          selection={{ kind: 'placeholder' }}
+          current={book.coverSelection}
+          label="placeholder cover"
+          onSelect={onSelect}
+        />
+        <CoverGallery
+          works={[
+            ...(state && 'works' in state ? state.works : []),
+            ...(book.coverSelection?.kind === 'open-library'
+              ? [
+                  {
+                    id: book.coverSelection.workId,
+                    title: book.title,
+                    authors: [book.author],
+                    covers: [
+                      {
+                        coverId: book.coverSelection.coverId,
+                        editionId: book.coverSelection.editionId,
+                      },
+                    ],
+                    editions: [],
+                    nextCursor: null,
+                  },
+                ]
+              : []),
+            ...(editionWork ? [editionWork] : []),
+          ]}
+          current={book.coverSelection}
+          onSelect={onSelect}
+        />
+        <div className="cover-upload">
+          <strong>Your own cover</strong>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+            aria-label="Cover photo"
+            hidden
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = '';
+              if (file) {
+                setPasteReady(false);
+                void selectImage(file, onSelect);
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={imageBusy}
+            onClick={() => fileInput.current?.click()}
+          >
+            Upload photo
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={imageBusy}
+            aria-pressed={pasteReady}
+            onClick={() => {
+              setImageError('');
+              setPasteReady(true);
+            }}
+          >
+            Paste image
+          </button>
+          <span>Images stay in this browser.</span>
+        </div>
       </div>
-    </div>
-    {pasteReady && <div className="cover-paste-target" ref={pasteTarget} tabIndex={0}
-      role="group" aria-label="Paste cover image">
-      <p role="status">Press Ctrl+V (Command+V on Mac) to paste a copied image.</p>
-      <button type="button" className="secondary-button" disabled={imageBusy}
-        onClick={() => setPasteReady(false)}>Cancel paste</button>
-    </div>}
-    {imageBusy && <p role="status">Preparing cover image...</p>}
-    {imageError && <p className="field-error" role="alert">{imageError}</p>}
-    <p className="cover-attribution"><a href="https://openlibrary.org" target="_blank" rel="noreferrer">Metadata and covers from Open Library</a></p>
-  </dialog>;
+      {pasteReady && (
+        <div className="cover-paste-target" ref={pasteTarget} tabIndex={0} role="group" aria-label="Paste cover image">
+          <p role="status">Press Ctrl+V (Command+V on Mac) to paste a copied image.</p>
+          <button type="button" className="secondary-button" disabled={imageBusy} onClick={() => setPasteReady(false)}>
+            Cancel paste
+          </button>
+        </div>
+      )}
+      {imageBusy && <p role="status">Preparing cover image...</p>}
+      {imageError && (
+        <p className="field-error" role="alert">
+          {imageError}
+        </p>
+      )}
+      <p className="cover-attribution">
+        <a href="https://openlibrary.org" target="_blank" rel="noreferrer">
+          Metadata and covers from Open Library
+        </a>
+      </p>
+    </dialog>
+  );
 }

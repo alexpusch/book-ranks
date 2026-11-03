@@ -8,32 +8,46 @@ import type { BookLanguageModel } from '../integrations/chromeAi/prompt';
 import { createBoard, importBooks, moveBook, queueBook } from '../board/board';
 import { openLibraryClient } from '../integrations/openLibrary/client';
 
-vi.mock('../export/exportJpeg', async (importOriginal) => ({ ...await importOriginal<typeof import('../export/exportJpeg')>(), exportJpeg: vi.fn() }));
+vi.mock('../export/exportJpeg', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../export/exportJpeg')>()),
+  exportJpeg: vi.fn(),
+}));
 vi.mock('../integrations/openLibrary/client', () => ({
-  openLibraryClient: { search: vi.fn(), searchPage: vi.fn(), editions: vi.fn() },
+  openLibraryClient: {
+    search: vi.fn(),
+    searchPage: vi.fn(),
+    editions: vi.fn(),
+  },
 }));
 
 beforeEach(() => {
   window.history.replaceState(null, '', '/?ai=true');
   localStorage.clear();
   vi.mocked(openLibraryClient.search).mockReset().mockResolvedValue([]);
-  vi.mocked(openLibraryClient.searchPage).mockReset().mockImplementation(async (input, signal) => ({
-    works: await openLibraryClient.search(input, signal), nextCursor: null,
-  }));
+  vi.mocked(openLibraryClient.searchPage)
+    .mockReset()
+    .mockImplementation(async (input, signal) => ({
+      works: await openLibraryClient.search(input, signal),
+      nextCursor: null,
+    }));
   vi.mocked(openLibraryClient.editions).mockReset().mockResolvedValue({ editions: [], nextCursor: null });
 });
 
 describe('book list UI', () => {
   it('clears all ranks into the gallery and restores the cleared board on reload', async () => {
     let board = importBooks(createBoard(), 'One\nTwo\nThree\nFour');
-    board.books.forEach((book) => { book.coverSelection = { kind: 'placeholder' }; });
+    board.books.forEach((book) => {
+      book.coverSelection = { kind: 'placeholder' };
+    });
     const [one, two, three, four] = board.gallery;
     board = moveBook(board, two, 'tier-S');
     board = moveBook(board, one, 'tier-S');
     board = moveBook(board, three, 'tier-E');
     localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
     const app = render(<App />);
-    const button = within(screen.getByRole('region', { name: 'Rank the books' })).getByRole('button', { name: 'Clear all' });
+    const button = within(screen.getByRole('region', { name: 'Rank the books' })).getByRole('button', {
+      name: 'Clear all',
+    });
     expect(button).toBeEnabled();
     expect(button.parentElement).toHaveTextContent('3 of 4 books ranked');
     expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
@@ -42,14 +56,21 @@ describe('book list UI', () => {
 
     expect(screen.getByText('0 of 4 books ranked')).toBeVisible();
     expect(button).toBeDisabled();
-    expect(within(screen.getByRole('region', { name: 'Your books' }))
-      .getAllByRole('article').map((card) => card.getAttribute('data-book-id'))).toEqual([four, two, one, three]);
+    expect(
+      within(screen.getByRole('region', { name: 'Your books' }))
+        .getAllByRole('article')
+        .map((card) => card.getAttribute('data-book-id')),
+    ).toEqual([four, two, one, three]);
     for (const tier of board.tiers) {
-      expect(within(screen.getByRole('region', { name: `Tier ${tier.name}` })).queryByRole('article')).not.toBeInTheDocument();
+      expect(
+        within(screen.getByRole('region', { name: `Tier ${tier.name}` })).queryByRole('article'),
+      ).not.toBeInTheDocument();
     }
     expect(screen.getByText('All ranked books returned to your reading pile.')).toHaveAttribute('role', 'status');
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
-      ...board, gallery: [four, two, one, three], tiers: board.tiers.map((tier) => ({ ...tier, bookIds: [] })),
+      ...board,
+      gallery: [four, two, one, three],
+      tiers: board.tiers.map((tier) => ({ ...tier, bookIds: [] })),
     });
     app.unmount();
     render(<App />);
@@ -59,20 +80,26 @@ describe('book list UI', () => {
 
   it('disables clearing when there are no ranked books', () => {
     render(<App />);
-    expect(within(screen.getByRole('region', { name: 'Rank the books' })).getByRole('button', { name: 'Clear all' })).toBeDisabled();
+    expect(
+      within(screen.getByRole('region', { name: 'Rank the books' })).getByRole('button', { name: 'Clear all' }),
+    ).toBeDisabled();
   });
 
   it('clears unranked books above the gallery, preserving ranks and drafts across reload', async () => {
     window.history.replaceState(null, '', '/');
     let board = importBooks(createBoard(), 'One\nTwo\nThree');
-    board.books.forEach((book) => { book.coverSelection = { kind: 'placeholder' }; });
+    board.books.forEach((book) => {
+      book.coverSelection = { kind: 'placeholder' };
+    });
     board = moveBook(board, board.gallery[1], 'tier-S');
     localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
     const user = userEvent.setup();
     const app = render(<App />);
     const entry = screen.getByRole('region', { name: 'Add books' });
     const gallery = screen.getByRole('region', { name: 'Your books' });
-    const actions = screen.getByRole('group', { name: 'Unranked book actions' });
+    const actions = screen.getByRole('group', {
+      name: 'Unranked book actions',
+    });
     const button = within(actions).getByRole('button', { name: 'Clear all' });
     expect(gallery).not.toContainElement(button);
     expect(actions.nextElementSibling).toBe(gallery);
@@ -88,15 +115,25 @@ describe('book list UI', () => {
     await user.click(screen.getByRole('button', { name: 'Manual entry' }));
     expect(screen.getByLabelText('Book name')).toHaveValue('Manual draft');
     expect(within(screen.getByRole('region', { name: 'Your books' })).queryByRole('article')).not.toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' })).toBeVisible();
+    expect(
+      within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' }),
+    ).toBeVisible();
     expect(screen.getByText('1 of 1 books ranked')).toBeVisible();
     expect(screen.getByText('All unranked books removed from your reading pile.')).toHaveAttribute('role', 'status');
-    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({ ...board, books: [board.books[1]], gallery: [] });
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
+      ...board,
+      books: [board.books[1]],
+      gallery: [],
+    });
     app.unmount();
     render(<App />);
-    expect(within(screen.getByRole('group', { name: 'Unranked book actions' })).getByRole('button', { name: 'Clear all' })).toBeDisabled();
+    expect(
+      within(screen.getByRole('group', { name: 'Unranked book actions' })).getByRole('button', { name: 'Clear all' }),
+    ).toBeDisabled();
     expect(screen.getByText('1 of 1 books ranked')).toBeVisible();
-    expect(within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' })).toBeVisible();
+    expect(
+      within(screen.getByRole('region', { name: 'Tier S' })).getByRole('article', { name: 'Two by Unknown author' }),
+    ).toBeVisible();
   });
 
   it.each(['/', '/?ai=false', '/?ai=', '/?ai=True', '/?other=true', '/?other=ai%3Dtrue'])(
@@ -112,7 +149,11 @@ describe('book list UI', () => {
       expect(window.LanguageModel?.availability).not.toHaveBeenCalled();
       await userEvent.setup().type(screen.getByLabelText('Book name'), 'Manual book');
       await userEvent.setup().click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
-      expect(await screen.findByRole('article', { name: 'Manual book by Unknown author' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('article', {
+          name: 'Manual book by Unknown author',
+        }),
+      ).toBeInTheDocument();
       expect(localStorage.getItem('shelf-life.entry-mode')).toBe('ai');
     },
   );
@@ -136,16 +177,23 @@ describe('book list UI', () => {
     }
   });
 
-  it.each(['Manual entry', 'AI assisted', 'Bulk insert'])('restores the explicit %s choice instead of the AI default', async (mode) => {
-    const user = userEvent.setup();
-    const app = render(<App />);
-    await user.click(await screen.findByRole('button', { name: mode }));
-    expect(localStorage.getItem('shelf-life.entry-mode')).toBe(mode === 'Manual entry' ? 'structured' : mode === 'Bulk insert' ? 'bulk' : 'ai');
-    app.unmount();
-    vi.stubGlobal('LanguageModel', { availability: vi.fn().mockResolvedValue('downloadable') });
-    render(<App />);
-    expect(await screen.findByRole('button', { name: mode })).toHaveAttribute('aria-pressed', 'true');
-  });
+  it.each(['Manual entry', 'AI assisted', 'Bulk insert'])(
+    'restores the explicit %s choice instead of the AI default',
+    async (mode) => {
+      const user = userEvent.setup();
+      const app = render(<App />);
+      await user.click(await screen.findByRole('button', { name: mode }));
+      expect(localStorage.getItem('shelf-life.entry-mode')).toBe(
+        mode === 'Manual entry' ? 'structured' : mode === 'Bulk insert' ? 'bulk' : 'ai',
+      );
+      app.unmount();
+      vi.stubGlobal('LanguageModel', {
+        availability: vi.fn().mockResolvedValue('downloadable'),
+      });
+      render(<App />);
+      expect(await screen.findByRole('button', { name: mode })).toHaveAttribute('aria-pressed', 'true');
+    },
+  );
 
   it('uses manual entry when AI is unavailable without losing the saved AI choice', async () => {
     localStorage.setItem('shelf-life.entry-mode', 'ai');
@@ -156,7 +204,9 @@ describe('book list UI', () => {
     await userEvent.setup().type(screen.getByLabelText('Book name'), 'Manual draft');
     expect(localStorage.getItem('shelf-life.entry-mode')).toBe('ai');
     app.unmount();
-    vi.stubGlobal('LanguageModel', { availability: vi.fn().mockResolvedValue('available') });
+    vi.stubGlobal('LanguageModel', {
+      availability: vi.fn().mockResolvedValue('available'),
+    });
     render(<App />);
     expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
   });
@@ -187,7 +237,9 @@ describe('book list UI', () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole('button', { name: 'Manual entry' });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage full'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Storage full');
+    });
     await user.click(screen.getByRole('switch'));
     await user.click(screen.getByRole('button', { name: 'Manual entry' }));
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
@@ -244,15 +296,29 @@ describe('book list UI', () => {
   it('does not report missing Chrome AI after adding a manual book in Safari with search results', async () => {
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Version/18.0 Safari/605.1.15');
     vi.stubGlobal('LanguageModel', undefined);
-    vi.mocked(openLibraryClient.search).mockResolvedValue([{
-      id: 'OL123W', title: 'Hyperion', authors: ['Dan Simmons'], covers: [{ coverId: 123 }],
-      editions: [], nextCursor: null,
-    }]);
+    vi.mocked(openLibraryClient.search).mockResolvedValue([
+      {
+        id: 'OL123W',
+        title: 'Hyperion',
+        authors: ['Dan Simmons'],
+        covers: [{ coverId: 123 }],
+        editions: [],
+        nextCursor: null,
+      },
+    ]);
     vi.mocked(openLibraryClient.editions).mockResolvedValue({
-      editions: [{
-        id: 'OL456M', title: 'Hyperion', publicationDate: '2025-10-01', covers: [{ coverId: 456, editionId: 'OL456M' }],
-        languages: [], publishers: [], isbns: [],
-      }], nextCursor: null,
+      editions: [
+        {
+          id: 'OL456M',
+          title: 'Hyperion',
+          publicationDate: '2025-10-01',
+          covers: [{ coverId: 456, editionId: 'OL456M' }],
+          languages: [],
+          publishers: [],
+          isbns: [],
+        },
+      ],
+      nextCursor: null,
     });
     const user = userEvent.setup();
     render(<App />);
@@ -262,7 +328,13 @@ describe('book list UI', () => {
     expect(await screen.findByRole('article', { name: 'Hyperion by Dan Simmons' })).toBeInTheDocument();
     await waitFor(() => {
       expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).books[0]).toMatchObject({
-        matchedWorkId: 'OL123W', coverSelection: { kind: 'open-library', workId: 'OL123W', coverId: 456, editionId: 'OL456M' },
+        matchedWorkId: 'OL123W',
+        coverSelection: {
+          kind: 'open-library',
+          workId: 'OL123W',
+          coverId: 456,
+          editionId: 'OL456M',
+        },
       });
     });
     expect(screen.queryAllByText(/Chrome built-in AI is not available/)).toHaveLength(0);
@@ -289,23 +361,42 @@ describe('book list UI', () => {
   });
 
   it('returns a removed ranked book to the gallery, persists it, and only deletes it from the gallery', async () => {
-    const rankedBook = { id: 'ranked', title: 'Dune', author: 'Frank Herbert', coverSelection: { kind: 'placeholder' } };
-    const unrankedBook = { id: 'unranked', title: 'Existing', author: 'Author', coverSelection: { kind: 'placeholder' } };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      version: 1, books: [rankedBook, unrankedBook],
-      gallery: ['unranked'], tiers: [{ id: 'tier-S', name: 'S', color: '#aabbcc', bookIds: ['ranked'] }],
-    }));
+    const rankedBook = {
+      id: 'ranked',
+      title: 'Dune',
+      author: 'Frank Herbert',
+      coverSelection: { kind: 'placeholder' },
+    };
+    const unrankedBook = {
+      id: 'unranked',
+      title: 'Existing',
+      author: 'Author',
+      coverSelection: { kind: 'placeholder' },
+    };
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        books: [rankedBook, unrankedBook],
+        gallery: ['unranked'],
+        tiers: [{ id: 'tier-S', name: 'S', color: '#aabbcc', bookIds: ['ranked'] }],
+      }),
+    );
     const user = userEvent.setup();
     const { unmount } = render(<App />);
     const tier = screen.getByRole('region', { name: 'Tier S' });
     await user.click(within(tier).getByRole('button', { name: 'Remove Dune' }));
 
     expect(within(tier).queryByRole('article')).not.toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Your books' }))
-      .getAllByRole('article').map((card) => card.getAttribute('data-book-id'))).toEqual(['unranked', 'ranked']);
+    expect(
+      within(screen.getByRole('region', { name: 'Your books' }))
+        .getAllByRole('article')
+        .map((card) => card.getAttribute('data-book-id')),
+    ).toEqual(['unranked', 'ranked']);
     expect(screen.getByText(/0 of 2 books ranked/)).toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject({
-      books: [rankedBook, unrankedBook], gallery: ['unranked', 'ranked'],
+      books: [rankedBook, unrankedBook],
+      gallery: ['unranked', 'ranked'],
       tiers: [{ id: 'tier-S', bookIds: [] }],
     });
 
@@ -316,7 +407,8 @@ describe('book list UI', () => {
     await user.click(within(gallery).getByRole('button', { name: 'Remove Dune' }));
     expect(screen.queryByRole('article', { name: 'Dune by Frank Herbert' })).not.toBeInTheDocument();
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toMatchObject({
-      books: [unrankedBook], gallery: ['unranked'],
+      books: [unrankedBook],
+      gallery: ['unranked'],
     });
   });
 
@@ -336,16 +428,33 @@ describe('book list UI', () => {
 
   it('shows a button loader without adding cards until the complete AI batch is extracted', async () => {
     const resolvePrompts: ((value: string) => void)[] = [];
-    const prompt = vi.fn(() => new Promise<string>((resolve) => { resolvePrompts.push(resolve); }));
+    const prompt = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolvePrompts.push(resolve);
+        }),
+    );
     const model: BookLanguageModel = {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({ prompt, destroy: vi.fn() }),
     };
     vi.stubGlobal('LanguageModel', model);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      version: 1, books: [{ id: 'existing', title: 'Existing', author: 'Author', coverSelection: { kind: 'placeholder' } }],
-      gallery: ['existing'], tiers: [{ id: 'tier-S', name: 'S', color: '#aabbcc', bookIds: [] }],
-    }));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        books: [
+          {
+            id: 'existing',
+            title: 'Existing',
+            author: 'Author',
+            coverSelection: { kind: 'placeholder' },
+          },
+        ],
+        gallery: ['existing'],
+        tiers: [{ id: 'tier-S', name: 'S', color: '#aabbcc', bookIds: [] }],
+      }),
+    );
     const user = userEvent.setup();
     render(<App />);
     const input = await screen.findByLabelText('Book title and author in natural language');
@@ -362,16 +471,24 @@ describe('book list UI', () => {
     expect(screen.getByRole('button', { name: 'Manual entry' })).toBeEnabled();
     await waitFor(() => expect(prompt).toHaveBeenCalledOnce());
     await user.click(screen.getByRole('button', { name: 'Remove Existing' }));
-    await act(async () => resolvePrompts[0](JSON.stringify({
-      books: [{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }],
-    })));
+    await act(async () =>
+      resolvePrompts[0](
+        JSON.stringify({
+          books: [{ title: 'The Spear Cuts Through Water', author: 'Simon Jimenez' }],
+        }),
+      ),
+    );
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(2));
     await act(async () => resolvePrompts[1](JSON.stringify({ books: [{ title: 'Another book', author: '' }] })));
     expect(screen.queryByRole('article')).not.toBeInTheDocument();
     await waitFor(() => expect(prompt).toHaveBeenCalledTimes(3));
     await act(async () => resolvePrompts[2](JSON.stringify({ books: [{ title: 'Last book', author: '' }] })));
-    expect(screen.getByRole('article', { name: 'The Spear Cuts Through Water by Simon Jimenez' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('article', {
+        name: 'The Spear Cuts Through Water by Simon Jimenez',
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('article', { name: 'Another book by Unknown author' })).toBeInTheDocument();
     expect(screen.getByRole('article', { name: 'Last book by Unknown author' })).toBeInTheDocument();
     expect(screen.queryByText('Existing')).not.toBeInTheDocument();
@@ -402,7 +519,11 @@ describe('book list UI', () => {
     vi.stubGlobal('LanguageModel', {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({
-        prompt: vi.fn().mockResolvedValue(JSON.stringify({ books: [{ title: 'A resolved book', author: 'Author' }] })),
+        prompt: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            books: [{ title: 'A resolved book', author: 'Author' }],
+          }),
+        ),
         destroy: vi.fn(),
       }),
     });
@@ -414,7 +535,12 @@ describe('book list UI', () => {
 
   it('cancels form extraction when saved-data recovery resets the list', async () => {
     let finish!: (response: string) => void;
-    const prompt = vi.fn(() => new Promise<string>((resolve) => { finish = resolve; }));
+    const prompt = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        }),
+    );
     vi.stubGlobal('LanguageModel', {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({ prompt, destroy: vi.fn() }),
@@ -465,7 +591,10 @@ describe('book list UI', () => {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({ prompt, destroy: vi.fn() }),
     });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queueBook(queueBook(createBoard(), 'Raw book'), 'Second raw book')));
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(queueBook(queueBook(createBoard(), 'Raw book'), 'Second raw book')),
+    );
     const user = userEvent.setup();
     render(<App />);
     await waitFor(() => expect(prompt).toHaveBeenCalledOnce());
@@ -484,7 +613,11 @@ describe('book list UI', () => {
     await user.click(within(editor).getByRole('button', { name: 'Save' }));
     await user.click(screen.getByRole('button', { name: 'Close book editor' }));
     await act(async () => resolvePrompts[1](JSON.stringify({ books: [{ title: 'Stale result', author: '' }] })));
-    expect(screen.getByRole('article', { name: 'Manual correction by Unknown author' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('article', {
+        name: 'Manual correction by Unknown author',
+      }),
+    ).toBeInTheDocument();
     expect(screen.queryByText('Stale result')).not.toBeInTheDocument();
   });
 
@@ -492,9 +625,15 @@ describe('book list UI', () => {
     const board = queueBook(createBoard(), 'Saved title | Saved author');
     localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
     render(<App />);
-    expect(await screen.findByRole('article', { name: 'Saved title by Saved author' }, { timeout: 5000 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('article', { name: 'Saved title by Saved author' }, { timeout: 5000 }),
+    ).toBeInTheDocument();
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
-    expect(saved.books[0]).toMatchObject({ id: board.books[0].id, title: 'Saved title', author: 'Saved author' });
+    expect(saved.books[0]).toMatchObject({
+      id: board.books[0].id,
+      title: 'Saved title',
+      author: 'Saved author',
+    });
     expect(saved.books[0].pendingInput).toBeUndefined();
   });
 
@@ -541,133 +680,192 @@ describe('book list UI', () => {
     render(<App />);
     expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByLabelText('Book title and author in natural language').tagName).toBe('TEXTAREA');
-    expect(screen.getByRole('link', { name: 'About the Prompt API' })).toHaveAttribute('href', 'https://developer.chrome.com/docs/ai/prompt-api');
+    expect(screen.getByRole('link', { name: 'About the Prompt API' })).toHaveAttribute(
+      'href',
+      'https://developer.chrome.com/docs/ai/prompt-api',
+    );
   });
 
-  it.each(['available', 'downloadable', 'downloading'] as const)('defaults to AI only for a downloaded model (%s) without creating a session', async (availability) => {
-    vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
-    render(<App />);
-    expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', String(availability === 'available'));
-    const modes = screen.getByRole('group', { name: 'Book addition mode' });
-    expect(within(modes).getAllByRole('button').map((button) => button.textContent)).toEqual(['Manual entry', 'AI assisted', 'Bulk insert']);
-    expect(screen.getByRole('button', { name: 'Manual entry' })).toHaveAttribute('aria-pressed', String(availability !== 'available'));
-    expect(window.LanguageModel!.create).not.toHaveBeenCalled();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    if (availability === 'available') {
+  it.each(['available', 'downloadable', 'downloading'] as const)(
+    'defaults to AI only for a downloaded model (%s) without creating a session',
+    async (availability) => {
+      vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
+      render(<App />);
+      expect(await screen.findByRole('button', { name: 'AI assisted' })).toHaveAttribute(
+        'aria-pressed',
+        String(availability === 'available'),
+      );
+      const modes = screen.getByRole('group', { name: 'Book addition mode' });
+      expect(
+        within(modes)
+          .getAllByRole('button')
+          .map((button) => button.textContent),
+      ).toEqual(['Manual entry', 'AI assisted', 'Bulk insert']);
+      expect(screen.getByRole('button', { name: 'Manual entry' })).toHaveAttribute(
+        'aria-pressed',
+        String(availability !== 'available'),
+      );
+      expect(window.LanguageModel!.create).not.toHaveBeenCalled();
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      if (availability === 'available') {
+        expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
+      }
+    },
+  );
+
+  it.each(['downloadable', 'downloading'] as const)(
+    'shows a yellow download warning with an icon when the model is %s',
+    async (availability) => {
+      vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
+      const user = userEvent.setup();
+      render(<App />);
+      expect(await screen.findByRole('button', { name: 'Manual entry' })).toHaveAttribute('aria-pressed', 'true');
       expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
-    }
-  });
+      await user.click(screen.getByRole('button', { name: 'AI assisted' }));
+      const warning = screen.getByText('This will require initial Gemini Nano download');
+      expect(warning).toHaveClass('model-download-warning');
+      expect(warning.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.getByLabelText('Book title and author in natural language')).toBeVisible();
+      expect(window.LanguageModel!.create).not.toHaveBeenCalled();
+    },
+  );
 
-  it.each(['downloadable', 'downloading'] as const)('shows a yellow download warning with an icon when the model is %s', async (availability) => {
-    vi.mocked(window.LanguageModel!.availability).mockResolvedValue(availability);
-    const user = userEvent.setup();
-    render(<App />);
-    expect(await screen.findByRole('button', { name: 'Manual entry' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'AI assisted' }));
-    const warning = screen.getByText('This will require initial Gemini Nano download');
-    expect(warning).toHaveClass('model-download-warning');
-    expect(warning.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByLabelText('Book title and author in natural language')).toBeVisible();
-    expect(window.LanguageModel!.create).not.toHaveBeenCalled();
-  });
+  it.each(['downloadable', 'downloading', 'available'] as const)(
+    'shows download progress only for an actual download, not a cached %s session',
+    async (availability) => {
+      const model = window.LanguageModel!;
+      vi.mocked(model.availability).mockResolvedValue(availability);
+      let reportProgress!: (event: { loaded: number }) => void;
+      let finishCreation!: () => void;
+      let finishPrompt!: () => void;
+      const prompt = vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            finishPrompt = () => resolve(JSON.stringify({ books: [{ title: 'Dune', author: '' }] }));
+          }),
+      );
+      vi.mocked(model.create).mockImplementationOnce((options) => {
+        options.monitor({
+          addEventListener: (_type, listener) => {
+            reportProgress = listener;
+          },
+        });
+        return new Promise((resolve) => {
+          finishCreation = () => resolve({ prompt, destroy: vi.fn() });
+        });
+      });
+      const user = userEvent.setup();
+      render(<App />);
+      await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
+      await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
+      await waitFor(() => expect(model.create).toHaveBeenCalledOnce());
+      if (availability !== 'available') {
+        const progress = screen.getByRole('progressbar', {
+          name: /Downloading Chrome AI model/,
+        });
+        expect(progress).toHaveAttribute('value', '0');
+        expect(progress.parentElement?.previousElementSibling).toHaveClass('bulk-entry');
+      }
+      act(() => reportProgress({ loaded: 0.42 }));
+      if (availability === 'available') expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      else {
+        expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0.42');
+        expect(screen.getByText('42%')).toBeVisible();
+      }
+      expect(screen.getByLabelText('Book title and author in natural language')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /^\+ Add books?$/ })).toBeDisabled();
+      vi.mocked(model.availability).mockResolvedValue('available');
+      await act(async () => finishCreation());
+      expect(prompt).toHaveBeenCalledOnce();
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
+      act(() => reportProgress({ loaded: 1 }));
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      await act(async () => finishPrompt());
+      expect(await screen.findByRole('article', { name: 'Dune by Unknown author' })).toBeInTheDocument();
 
-  it.each(['downloadable', 'downloading', 'available'] as const)('shows download progress only for an actual download, not a cached %s session', async (availability) => {
-    const model = window.LanguageModel!;
-    vi.mocked(model.availability).mockResolvedValue(availability);
-    let reportProgress!: (event: { loaded: number }) => void;
-    let finishCreation!: () => void;
-    let finishPrompt!: () => void;
-    const prompt = vi.fn(() => new Promise<string>((resolve) => {
-      finishPrompt = () => resolve(JSON.stringify({ books: [{ title: 'Dune', author: '' }] }));
-    }));
-    vi.mocked(model.create).mockImplementationOnce((options) => {
-      options.monitor({ addEventListener: (_type, listener) => { reportProgress = listener; } });
-      return new Promise((resolve) => { finishCreation = () => resolve({ prompt, destroy: vi.fn() }); });
-    });
-    const user = userEvent.setup();
-    render(<App />);
-    await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
-    await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
-    await waitFor(() => expect(model.create).toHaveBeenCalledOnce());
-    if (availability !== 'available') {
-      const progress = screen.getByRole('progressbar', { name: /Downloading Chrome AI model/ });
-      expect(progress).toHaveAttribute('value', '0');
-      expect(progress.parentElement?.previousElementSibling).toHaveClass('bulk-entry');
-    }
-    act(() => reportProgress({ loaded: 0.42 }));
-    if (availability === 'available') expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    else {
-      expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0.42');
-      expect(screen.getByText('42%')).toBeVisible();
-    }
-    expect(screen.getByLabelText('Book title and author in natural language')).toBeDisabled();
-    expect(screen.getByRole('button', { name: /^\+ Add books?$/ })).toBeDisabled();
-    vi.mocked(model.availability).mockResolvedValue('available');
-    await act(async () => finishCreation());
-    expect(prompt).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    expect(screen.queryByText('This will require initial Gemini Nano download')).not.toBeInTheDocument();
-    act(() => reportProgress({ loaded: 1 }));
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    await act(async () => finishPrompt());
-    expect(await screen.findByRole('article', { name: 'Dune by Unknown author' })).toBeInTheDocument();
+      await user.type(screen.getByLabelText('Book title and author in natural language'), 'Piranesi');
+      await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
+      expect(
+        await screen.findByRole('article', {
+          name: 'Piranesi by Unknown author',
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    },
+  );
 
-    await user.type(screen.getByLabelText('Book title and author in natural language'), 'Piranesi');
-    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
-    expect(await screen.findByRole('article', { name: 'Piranesi by Unknown author' })).toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
+  it.each(['failure', 'cancellation'] as const)(
+    'clears download progress on %s without adding a card',
+    async (outcome) => {
+      const model = window.LanguageModel!;
+      vi.mocked(model.availability).mockResolvedValue('downloadable');
+      let failDownload!: () => void;
+      vi.mocked(model.create).mockImplementationOnce(
+        ({ signal }) =>
+          new Promise((_resolve, reject) => {
+            failDownload = () => reject(new Error('Model download failed'));
+            signal.addEventListener('abort', () => reject(signal.reason), {
+              once: true,
+            });
+          }),
+      );
+      const user = userEvent.setup();
+      const app = render(<App />);
+      await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
+      await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
+      await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
+      expect(await screen.findByRole('progressbar')).toBeVisible();
+      if (outcome === 'failure') {
+        await act(async () => failDownload());
+        expect(await screen.findByRole('alert')).toHaveTextContent('Model download failed');
+      } else {
+        app.unmount();
+        expect(vi.mocked(model.create).mock.calls[0][0].signal.aborted).toBe(true);
+        expect(screen.queryByRole('article')).not.toBeInTheDocument();
+      }
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    },
+  );
 
-  it.each(['failure', 'cancellation'] as const)('clears download progress on %s without adding a card', async (outcome) => {
-    const model = window.LanguageModel!;
-    vi.mocked(model.availability).mockResolvedValue('downloadable');
-    let failDownload!: () => void;
-    vi.mocked(model.create).mockImplementationOnce(({ signal }) => new Promise((_resolve, reject) => {
-      failDownload = () => reject(new Error('Model download failed'));
-      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-    }));
-    const user = userEvent.setup();
-    const app = render(<App />);
-    await user.click(await screen.findByRole('button', { name: 'AI assisted' }));
-    await user.type(await screen.findByLabelText('Book title and author in natural language'), 'Dune');
-    await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
-    expect(await screen.findByRole('progressbar')).toBeVisible();
-    if (outcome === 'failure') {
-      await act(async () => failDownload());
-      expect(await screen.findByRole('alert')).toHaveTextContent('Model download failed');
-    } else {
-      app.unmount();
-      expect(vi.mocked(model.create).mock.calls[0][0].signal.aborted).toBe(true);
-      expect(screen.queryByRole('article')).not.toBeInTheDocument();
-    }
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-  });
-
-  it.each(['missing', 'unavailable', 'rejected'] as const)('keeps manual and bulk modes available when the Prompt API is %s', async (state) => {
-    if (state === 'missing') vi.stubGlobal('LanguageModel', undefined);
-    else if (state === 'unavailable') vi.mocked(window.LanguageModel!.availability).mockResolvedValue('unavailable');
-    else vi.mocked(window.LanguageModel!.availability).mockRejectedValue(new Error('Availability check failed'));
-    await act(async () => { render(<App />); });
-    expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Manual entry' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Bulk insert' })).toBeEnabled();
-    expect(screen.getByLabelText('Book name')).toBeVisible();
-    expect(screen.queryByRole('link', { name: 'About the Prompt API' })).not.toBeInTheDocument();
-    if (state === 'rejected') expect(screen.getByRole('alert')).toHaveTextContent('Could not check Chrome AI availability. Availability check failed');
-  });
+  it.each(['missing', 'unavailable', 'rejected'] as const)(
+    'keeps manual and bulk modes available when the Prompt API is %s',
+    async (state) => {
+      if (state === 'missing') vi.stubGlobal('LanguageModel', undefined);
+      else if (state === 'unavailable') vi.mocked(window.LanguageModel!.availability).mockResolvedValue('unavailable');
+      else vi.mocked(window.LanguageModel!.availability).mockRejectedValue(new Error('Availability check failed'));
+      await act(async () => {
+        render(<App />);
+      });
+      expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Manual entry' })).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Bulk insert' })).toBeEnabled();
+      expect(screen.getByLabelText('Book name')).toBeVisible();
+      expect(screen.queryByRole('link', { name: 'About the Prompt API' })).not.toBeInTheDocument();
+      if (state === 'rejected')
+        expect(screen.getByRole('alert')).toHaveTextContent(
+          'Could not check Chrome AI availability. Availability check failed',
+        );
+    },
+  );
 
   it('keeps manual entry available during the check and preserves a manual draft when support resolves', async () => {
     let resolveAvailability!: (value: 'available') => void;
-    vi.mocked(window.LanguageModel!.availability).mockReturnValue(new Promise((resolve) => { resolveAvailability = resolve; }));
+    vi.mocked(window.LanguageModel!.availability).mockReturnValue(
+      new Promise((resolve) => {
+        resolveAvailability = resolve;
+      }),
+    );
     const user = userEvent.setup();
     render(<App />);
     expect(screen.queryByRole('button', { name: 'AI assisted' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Manual entry' })).toBeVisible();
     await user.type(screen.getByLabelText('Book name'), 'Manual draft');
-    await act(async () => { resolveAvailability('available'); });
+    await act(async () => {
+      resolveAvailability('available');
+    });
     expect(screen.getByRole('button', { name: 'AI assisted' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByLabelText('Book name')).toHaveValue('Manual draft');
   });
@@ -713,10 +911,19 @@ describe('book list UI', () => {
     expect(input.tagName).toBe('TEXTAREA');
     expect(input).toHaveAccessibleDescription(/book title \| author\(s\) name/);
     expect(screen.getAllByRole('textbox')).toHaveLength(1);
-    fireEvent.change(input, { target: { value: '\n Dune | Frank   Herbert \r\nGood Omens | Terry Pratchett, Neil Gaiman\nPiranesi\nDune | Frank Herbert\n' } });
+    fireEvent.change(input, {
+      target: {
+        value:
+          '\n Dune | Frank   Herbert \r\nGood Omens | Terry Pratchett, Neil Gaiman\nPiranesi\nDune | Frank Herbert\n',
+      },
+    });
     await user.click(screen.getByRole('button', { name: '+ Add books' }));
     expect(screen.getAllByRole('article', { name: 'Dune by Frank Herbert' })).toHaveLength(2);
-    expect(screen.getByRole('article', { name: 'Good Omens by Terry Pratchett, Neil Gaiman' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('article', {
+        name: 'Good Omens by Terry Pratchett, Neil Gaiman',
+      }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('article', { name: 'Piranesi by Unknown author' })).toBeInTheDocument();
     expect(input).toHaveValue('');
     expect(screen.getByText('Added 4 books to your reading pile.')).toHaveAttribute('role', 'status');
@@ -725,9 +932,15 @@ describe('book list UI', () => {
       expect(saved.books).toHaveLength(4);
       expect(saved.gallery).toEqual(saved.books.map((book: { id: string }) => book.id));
     });
-    await waitFor(() => expect(openLibraryClient.search).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Good Omens', author: 'Terry Pratchett, Neil Gaiman' }), expect.any(AbortSignal),
-    ));
+    await waitFor(() =>
+      expect(openLibraryClient.search).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Good Omens',
+          author: 'Terry Pratchett, Neil Gaiman',
+        }),
+        expect.any(AbortSignal),
+      ),
+    );
     app.unmount();
     render(<App />);
     expect(screen.getByRole('button', { name: 'Bulk insert' })).toHaveAttribute('aria-pressed', 'true');
@@ -736,7 +949,8 @@ describe('book list UI', () => {
   });
 
   it.each(['', ' \n ', 'Valid | Author\n | Author', 'Valid | Author\nBad | Author | Extra'])(
-    'rejects invalid bulk input atomically and preserves the draft (%j)', async (text) => {
+    'rejects invalid bulk input atomically and preserves the draft (%j)',
+    async (text) => {
       vi.stubGlobal('LanguageModel', undefined);
       const user = userEvent.setup();
       render(<App />);
@@ -744,7 +958,9 @@ describe('book list UI', () => {
       const input = screen.getByLabelText('Books to add');
       fireEvent.change(input, { target: { value: text } });
       await user.click(screen.getByRole('button', { name: '+ Add books' }));
-      expect(screen.getByRole('alert')).toHaveTextContent(text.includes('Valid') ? 'Line 2:' : 'Enter at least one book title.');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        text.includes('Valid') ? 'Line 2:' : 'Enter at least one book title.',
+      );
       expect(input).toHaveValue(text);
       expect(input).toHaveAttribute('aria-invalid', 'true');
       expect(screen.queryByRole('article')).not.toBeInTheDocument();
@@ -758,12 +974,18 @@ describe('book list UI', () => {
 
   it('preserves a bulk draft and selection when the AI availability check completes', async () => {
     let resolveAvailability!: (value: 'available') => void;
-    vi.mocked(window.LanguageModel!.availability).mockReturnValue(new Promise((resolve) => { resolveAvailability = resolve; }));
+    vi.mocked(window.LanguageModel!.availability).mockReturnValue(
+      new Promise((resolve) => {
+        resolveAvailability = resolve;
+      }),
+    );
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
     await user.type(screen.getByLabelText('Books to add'), 'Dune | Frank Herbert');
-    await act(async () => { resolveAvailability('available'); });
+    await act(async () => {
+      resolveAvailability('available');
+    });
     expect(screen.getByRole('button', { name: 'Bulk insert' })).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: 'AI assisted' }));
     await user.click(screen.getByRole('button', { name: 'Bulk insert' }));
@@ -793,20 +1015,32 @@ describe('book list UI', () => {
 
   it('adds all AI-extracted books together before covers finish and persists the full batch', async () => {
     let finishSearch!: () => void;
-    vi.mocked(openLibraryClient.search).mockImplementationOnce(() => new Promise((resolve) => {
-      finishSearch = () => resolve([]);
-    }));
+    vi.mocked(openLibraryClient.search).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSearch = () => resolve([]);
+        }),
+    );
     vi.stubGlobal('LanguageModel', {
       availability: vi.fn().mockResolvedValue('available'),
       create: vi.fn().mockResolvedValue({
-        prompt: vi.fn().mockResolvedValue(JSON.stringify({ books: [{ title: 'One', author: '' }, { title: 'Two', author: '' }] })),
+        prompt: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            books: [
+              { title: 'One', author: '' },
+              { title: 'Two', author: '' },
+            ],
+          }),
+        ),
         destroy: vi.fn(),
       }),
     });
     const user = userEvent.setup();
     render(<App />);
     fireEvent.change(await screen.findByLabelText('Book title and author in natural language'), {
-      target: { value: 'One by Author\nTwo by Other author\nListen now\nDownload' },
+      target: {
+        value: 'One by Author\nTwo by Other author\nListen now\nDownload',
+      },
     });
     await user.click(screen.getByRole('button', { name: /^\+ Add books?$/ }));
     expect(await screen.findByRole('article', { name: 'One by Unknown author' })).toBeInTheDocument();
@@ -837,7 +1071,9 @@ describe('book list UI', () => {
   });
 
   it('reports autosave failures with a retry action', async () => {
-    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Quota exceeded'); });
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('Quota exceeded');
+    });
     const user = userEvent.setup();
     render(<App />);
     expect(screen.getByRole('alert')).toHaveTextContent('Autosave failed');
@@ -863,8 +1099,15 @@ describe('book list UI', () => {
   });
 
   it('shows a busy export state and reports an export failure', async () => {
-    let rejectExport: (reason: Error) => void = () => { throw new Error('Export has not started.'); };
-    vi.mocked(exportJpeg).mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectExport = reject; }));
+    let rejectExport: (reason: Error) => void = () => {
+      throw new Error('Export has not started.');
+    };
+    vi.mocked(exportJpeg).mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectExport = reject;
+        }),
+    );
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: 'Download' }));

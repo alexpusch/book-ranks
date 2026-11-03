@@ -4,9 +4,11 @@ import { normalize, type LookupInput, type WorkCandidate } from '../integrations
 
 export interface LookupResult {
   outcome: 'matched' | 'needs-review' | 'not-found' | 'error';
-  works: WorkCandidate[]; selection?: CoverSelection;
+  works: WorkCandidate[];
+  selection?: CoverSelection;
   nextSearchCursor?: string | null;
-  warning?: string; error?: string;
+  warning?: string;
+  error?: string;
 }
 
 export type LookupState = LookupResult | { outcome: 'queued' } | { outcome: 'loading' } | { outcome: 'extracting' };

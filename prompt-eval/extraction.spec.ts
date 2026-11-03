@@ -13,29 +13,31 @@ interface ExtractionResult {
 
 let context: BrowserContext;
 let page: Page;
-let environment: { userAgent: string; availability: string; headless: boolean; profile: string };
+let environment: {
+  userAgent: string;
+  availability: string;
+  headless: boolean;
+  profile: string;
+};
 
 test.beforeAll(async ({ baseURL }) => {
   test.setTimeout(900_000);
   const profile = resolve(process.env.CHROME_AI_PROFILE ?? '.scratch/chrome-ai');
-  context = await chromium.launchPersistentContext(
-    profile,
-    {
-      channel: 'chrome',
-      headless: true,
-      // Playwright's defaults disable OptimizationHints and component updates needed by Chrome AI.
-      ignoreDefaultArgs: true,
-      args: [
-        `--user-data-dir=${profile}`, '--remote-debugging-pipe', '--no-first-run', '--headless=new', 'about:blank',
-      ],
-    },
-  );
+  context = await chromium.launchPersistentContext(profile, {
+    channel: 'chrome',
+    headless: true,
+    // Playwright's defaults disable OptimizationHints and component updates needed by Chrome AI.
+    ignoreDefaultArgs: true,
+    args: [`--user-data-dir=${profile}`, '--remote-debugging-pipe', '--no-first-run', '--headless=new', 'about:blank'],
+  });
   page = await context.newPage();
   // Development reloads must not interrupt on-device inference during evaluation.
-  await page.route('**/@vite/client', (route) => route.fulfill({
-    contentType: 'application/javascript',
-    body: 'export function createHotContext() {} export function injectQuery(url) { return url; }',
-  }));
+  await page.route('**/@vite/client', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: 'export function createHotContext() {} export function injectQuery(url) { return url; }',
+    }),
+  );
   if (!baseURL) throw new Error('The prompt evaluation requires a configured baseURL.');
   await page.goto(baseURL);
   page.on('console', (message) => {
@@ -45,11 +47,16 @@ test.beforeAll(async ({ baseURL }) => {
   if (!availability || availability === 'unavailable') {
     throw new Error(
       `Real Chrome AI is ${availability ?? 'missing'}. Enable the Prompt API in a supported desktop Chrome ` +
-      'and prepare a dedicated profile with CHROME_AI_PROFILE. See README.md#real-model-prompt-evaluation. ' +
-      'No mocked model or skipped evaluation is used.',
+        'and prepare a dedicated profile with CHROME_AI_PROFILE. See README.md#real-model-prompt-evaluation. ' +
+        'No mocked model or skipped evaluation is used.',
     );
   }
-  environment = { userAgent: await page.evaluate(() => navigator.userAgent), availability, headless: true, profile };
+  environment = {
+    userAgent: await page.evaluate(() => navigator.userAgent),
+    availability,
+    headless: true,
+    profile,
+  };
   console.log(environment);
   if (availability !== 'available') {
     await page.locator('body').click({ position: { x: 1, y: 1 } });
@@ -85,7 +92,9 @@ test(`extracts minimal, discriminative search terms: ${extractionCases.length} r
     await test.step(`${example.category}: ${example.id}`, async () => {
       const result = await page.evaluate(async (input) => {
         const modulePath = '/src/bookResolution/extraction.ts';
-        const { extractBooks }: typeof import('../src/bookResolution/extraction') = await import(/* @vite-ignore */ modulePath);
+        const { extractBooks }: typeof import('../src/bookResolution/extraction') = await import(
+          /* @vite-ignore */ modulePath
+        );
         const statuses: string[] = [];
         const start = performance.now();
         try {
@@ -99,9 +108,10 @@ test(`extracts minimal, discriminative search terms: ${extractionCases.length} r
           };
         }
       }, example.input);
-      const matches = 'expectedError' in example
-        ? result.error?.startsWith(example.expectedError) === true
-        : !result.error && example.accepted.some((books) => isDeepStrictEqual(books, result.books));
+      const matches =
+        'expectedError' in example
+          ? result.error?.startsWith(example.expectedError) === true
+          : !result.error && example.accepted.some((books) => isDeepStrictEqual(books, result.books));
       if (matches) passed++;
       const outcome = { ...example, ...result, passed: matches };
       results.push(outcome);
@@ -113,7 +123,12 @@ test(`extracts minimal, discriminative search terms: ${extractionCases.length} r
       expect.soft(matches, JSON.stringify(outcome, null, 2)).toBe(true);
     });
   }
-  const summary = { environment, passed, total: extractionCases.length, results };
+  const summary = {
+    environment,
+    passed,
+    total: extractionCases.length,
+    results,
+  };
   await testInfo.attach('evaluation-summary', {
     body: JSON.stringify(summary, null, 2),
     contentType: 'application/json',

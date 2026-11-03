@@ -15,12 +15,19 @@ export const test = base.extend({
             prompt: async (text: string) => {
               if (text.startsWith('{"requested":')) {
                 const data = JSON.parse(text);
-                return JSON.stringify({ workId: data.candidates[0]?.workId ?? null });
+                return JSON.stringify({
+                  workId: data.candidates[0]?.workId ?? null,
+                });
               }
-              return JSON.stringify({ books: text.split(/\r?\n/u).filter((line) => line.trim()).map((line) => {
-                const [title, author = ''] = line.split('|');
-                return { title, author };
-              }) });
+              return JSON.stringify({
+                books: text
+                  .split(/\r?\n/u)
+                  .filter((line) => line.trim())
+                  .map((line) => {
+                    const [title, author = ''] = line.split('|');
+                    return { title, author };
+                  }),
+              });
             },
             destroy() {},
           }),

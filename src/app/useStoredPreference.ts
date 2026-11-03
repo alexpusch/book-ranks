@@ -9,7 +9,10 @@ export function useStoredPreference<T extends string>(key: string, choices: read
       if (value === undefined) throw new Error('Unsupported saved preference.');
       return { value, warning: '' };
     } catch (error) {
-      return { value: fallback, warning: `Could not load your preference. ${error instanceof Error ? error.message : 'Browser storage is unavailable.'}` };
+      return {
+        value: fallback,
+        warning: `Could not load your preference. ${error instanceof Error ? error.message : 'Browser storage is unavailable.'}`,
+      };
     }
   });
   const [value, setValue] = useState(initial.value);
@@ -21,7 +24,9 @@ export function useStoredPreference<T extends string>(key: string, choices: read
       window.localStorage.setItem(key, next);
       setWarning('');
     } catch (error) {
-      setWarning(`Could not save your preference. ${error instanceof Error ? error.message : 'Browser storage is unavailable.'}`);
+      setWarning(
+        `Could not save your preference. ${error instanceof Error ? error.message : 'Browser storage is unavailable.'}`,
+      );
     }
   }
 
