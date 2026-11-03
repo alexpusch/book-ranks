@@ -1,5 +1,6 @@
 import type { Board, Book } from '../board/board';
 import { BookContent } from '../books/BookContent';
+import { TierName } from '../ranking/TierName';
 
 export function ExportBoard({ board }: { board: Board }) {
   const books = new Map<string, Book>(board.books.map((book) => [book.id, book]));
@@ -11,7 +12,7 @@ export function ExportBoard({ board }: { board: Board }) {
         {board.tiers.map((tier) => (
           <section key={tier.id} className="tier-row">
             <div className="tier-label" style={{ backgroundColor: tier.color }}>
-              <h3>{tier.name}</h3>
+              <TierName name={tier.name} />
               <span>
                 {tier.bookIds.length} {tier.bookIds.length === 1 ? 'book' : 'books'}
               </span>

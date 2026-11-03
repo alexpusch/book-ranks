@@ -3,7 +3,6 @@ import { DndContext, DragOverlay } from '@dnd-kit/core';
 import { BookContent } from '../books/BookContent';
 import { BookEntry } from '../books/BookEntry';
 import { BookProvider } from '../books/BookProvider';
-import { TierSettings } from '../ranking/TierSettings';
 import { Gallery } from '../ranking/Gallery';
 import { RankingBoard } from '../ranking/RankingBoard';
 import { useRankingDrag } from '../ranking/useRankingDrag';
@@ -30,7 +29,6 @@ export function App() {
     actionError,
     setActionError,
   } = useBoard(setNotice);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const theme = useStoredPreference('shelf-life.theme', ['light', 'dark'], 'light');
   const darkMode = theme.value === 'dark';
   const [exporting, setExporting] = useState(false);
@@ -152,9 +150,6 @@ export function App() {
                 </p>
               </div>
               <div className="board-toolbar">
-                <button className="secondary-button" onClick={() => setSettingsOpen(true)}>
-                  ⚙ Tier settings
-                </button>
                 <button
                   className="theme-toggle"
                   type="button"
@@ -190,6 +185,7 @@ export function App() {
             </div>
             <RankingBoard
               board={board}
+              onChange={change}
               onRemove={(id) => {
                 if (change((current) => moveBook(current, id, GALLERY)))
                   setNotice('Book returned to your reading pile.');
@@ -222,7 +218,6 @@ export function App() {
           <span>{exporting ? 'Creating JPEG...' : 'Download'}</span>
         </span>
       </button>
-      {settingsOpen && <TierSettings board={board} onChange={change} onClose={() => setSettingsOpen(false)} />}
       <div className="export-stage" aria-hidden="true">
         <div ref={exportRef}>
           <ExportBoard board={board} />

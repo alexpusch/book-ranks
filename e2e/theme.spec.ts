@@ -11,7 +11,7 @@ test('theme toggle styles the page and dialogs and produces matching JPEG pixels
   }, board);
   await page.goto('/');
   const toggle = page.getByRole('switch', { name: /^(Dark|Light) mode$/ });
-  const settings = page.getByRole('button', { name: /Tier settings/ });
+  const tierName = page.getByRole('button', { name: 'Rename tier S', exact: true });
   await expect(toggle).toHaveAttribute('aria-checked', 'false');
 
   for (const dark of [false, true]) {
@@ -33,9 +33,11 @@ test('theme toggle styles the page and dialogs and produces matching JPEG pixels
       'background-color',
       dark ? 'rgb(120, 96, 47)' : 'rgb(49, 77, 61)',
     );
-    await expect(settings).toHaveCSS('background-color', dark ? 'rgb(53, 46, 32)' : 'rgb(250, 249, 244)');
-    await settings.click();
-    await expect(page.getByRole('dialog')).toHaveCSS('background-color', pageColor);
+    await page.getByRole('region', { name: 'Tier S', exact: true }).locator('.tier-label').hover();
+    await tierName.click();
+    await expect(page.getByRole('textbox', { name: 'Name for tier S' })).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'Name for tier S' })).toHaveCSS('color', 'rgb(52, 46, 44)');
+    await expect(page.getByRole('form', { name: /Edit tier/ })).toHaveCount(0);
     await page.keyboard.press('Escape');
 
     for (const width of [1360, 320]) {
@@ -43,10 +45,7 @@ test('theme toggle styles the page and dialogs and produces matching JPEG pixels
       await toggle.scrollIntoViewIfNeeded();
       await expect(toggle).toBeVisible();
       const bounds = await toggle.boundingBox();
-      const settingsBounds = await settings.boundingBox();
-      if (!bounds || !settingsBounds) throw new Error('Theme and settings controls are not visible.');
-      expect(bounds.x).toBeGreaterThanOrEqual(settingsBounds.x + settingsBounds.width);
-      expect(bounds.y).toBe(settingsBounds.y);
+      if (!bounds) throw new Error('Theme control is not visible.');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     }
 

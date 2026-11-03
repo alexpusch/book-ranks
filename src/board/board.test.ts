@@ -249,6 +249,36 @@ describe('board operations', () => {
     expect(() => moveBook(board, board.gallery[0], 'missing')).toThrow('destination');
     expect(() => moveBook(board, board.gallery[0], GALLERY, -1)).toThrow('position');
     expect(() => reorderTier(board, board.tiers[0].id, -1)).toThrow('position');
+    for (const index of [-1, board.tiers.length + 1, 0.5, NaN]) {
+      expect(() => addTier(board, index)).toThrow('position');
+    }
+  });
+
+  it('inserts tiers at the beginning, middle, and end without changing existing tiers', () => {
+    const board = populated();
+    for (const index of [0, 3, board.tiers.length]) {
+      const next = addTier(board, index);
+      expect(next.tiers[index]).toMatchObject({ name: 'New tier', bookIds: [] });
+      expect(next.tiers.filter((_, position) => position !== index)).toEqual(board.tiers);
+      expect(next.books).toBe(board.books);
+      expect(next.gallery).toBe(board.gallery);
+    }
+  });
+
+  it('blends neighboring colors for new tiers and uses the nearest color at the edges', () => {
+    const board = createBoard();
+    board.tiers = [
+      { ...board.tiers[0], color: '#102030' },
+      { ...board.tiers[1], color: '#304050' },
+      { ...board.tiers[2], color: '#ffffff' },
+    ];
+    expect(addTier(board, 1).tiers[1].color).toBe('#203040');
+    expect(addTier(board, 2).tiers[2].color).toBe('#98a0a8');
+    expect(addTier(board, 0).tiers[0].color).toBe('#102030');
+    expect(addTier(board).tiers[3].color).toBe('#ffffff');
+    board.tiers = board.tiers.slice(0, 1);
+    expect(addTier(board, 0).tiers[0].color).toBe('#102030');
+    expect(addTier(board).tiers[1].color).toBe('#102030');
   });
 
   it('edits metadata without changing placement or cover and rejects invalid edits atomically', () => {

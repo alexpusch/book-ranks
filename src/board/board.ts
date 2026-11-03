@@ -182,17 +182,31 @@ export function updateBook(board: Board, bookId: string, changes: Pick<Book, 'ti
   };
 }
 
-export function addTier(board: Board): Board {
+export function addTier(board: Board, index = board.tiers.length): Board {
+  if (!Number.isInteger(index) || index < 0 || index > board.tiers.length) {
+    throw new Error('Invalid tier position.');
+  }
+  const neighbors = board.tiers.slice(Math.max(0, index - 1), index + 1);
+  const color = `#${[1, 3, 5]
+    .map((offset) =>
+      Math.round(
+        neighbors.reduce((sum, tier) => sum + parseInt(tier.color.slice(offset, offset + 2), 16), 0) / neighbors.length,
+      )
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
   return {
     ...board,
     tiers: [
-      ...board.tiers,
+      ...board.tiers.slice(0, index),
       {
         id: `tier-${crypto.randomUUID()}`,
         name: 'New tier',
-        color: '#c7c4ba',
+        color,
         bookIds: [],
       },
+      ...board.tiers.slice(index),
     ],
   };
 }

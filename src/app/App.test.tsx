@@ -264,7 +264,7 @@ describe('book list UI', () => {
     }
   });
 
-  it('toggles dark mode next to tier settings and exports the current theme', async () => {
+  it('toggles dark mode in the ranking toolbar and exports the current theme', async () => {
     const user = userEvent.setup();
     const { unmount } = render(<App />);
     const toggle = screen.getByRole('switch', { name: 'Dark mode' });
@@ -273,7 +273,7 @@ describe('book list UI', () => {
     expect(toggle).toHaveTextContent('');
     expect(toggle.querySelector('svg circle')).not.toBeInTheDocument();
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
-    expect(toggle.previousElementSibling).toBe(screen.getByRole('button', { name: /Tier settings/ }));
+    expect(screen.queryByRole('button', { name: /Tier settings/ })).not.toBeInTheDocument();
 
     await user.click(toggle);
     expect(toggle).toHaveAttribute('aria-checked', 'true');
@@ -1117,29 +1117,124 @@ describe('book list UI', () => {
     expect(screen.getByRole('button', { name: 'Download' })).toBeEnabled();
   });
 
-  it('opens settings and edits, recolors, adds, reorders and deletes tiers', async () => {
-    vi.spyOn(HTMLDialogElement.prototype, 'showModal').mockImplementation(function (this: HTMLDialogElement) {
-      this.setAttribute('open', '');
+  it('edits tiers inline, inserts at a boundary, and persists the result without reorder controls', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Rename tier S' }));
+    const name = screen.getByRole('textbox', { name: 'Name for tier S' });
+    expect(name).toHaveFocus();
+    await user.clear(name);
+    await user.type(name, 'Favorites{Enter}');
+    expect(screen.getByRole('button', { name: 'Rename tier Favorites' })).toHaveFocus();
+    fireEvent.change(screen.getByLabelText('Color for tier Favorites'), { target: { value: '#aabbcc' } });
+    expect(screen.queryByRole('form', { name: /Edit tier/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Tier Favorites' }).querySelector('.tier-label')).toHaveStyle({
+      backgroundColor: '#aabbcc',
     });
-    vi.spyOn(HTMLDialogElement.prototype, 'close').mockImplementation(function (this: HTMLDialogElement) {
-      this.removeAttribute('open');
+    expect(screen.queryByRole('button', { name: /^Move tier / })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Insert tier before Favorites' }));
+    const inserted = screen.getByRole('textbox', { name: 'Name for tier New tier' });
+    expect(inserted).toHaveFocus();
+    await user.clear(inserted);
+    await user.type(inserted, 'Middle{Enter}');
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(saved.tiers.map((tier: { name: string }) => tier.name)).toEqual([
+      'Middle',
+      'Favorites',
+      'A',
+      'B',
+      'C',
+      'D',
+      'E',
+    ]);
+    unmount();
+    render(<App />);
+    expect(screen.getByRole('region', { name: 'Tier Middle' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Tier Favorites' }).querySelector('.tier-label')).toHaveStyle({
+      backgroundColor: '#aabbcc',
     });
+  });
+
+  it('rejects empty names, cancels with Escape, and saves names on blur without a form', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await user.click(screen.getByRole('button', { name: /Tier settings/ }));
-    const dialog = screen.getByRole('dialog');
-    const name = within(dialog).getByLabelText('Name for tier 1');
-    await user.clear(name);
-    await user.type(name, 'Favorites');
+    await user.click(screen.getByRole('button', { name: 'Rename tier S' }));
+    await user.clear(screen.getByLabelText('Name for tier S'));
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('alert')).toHaveTextContent('Tier name cannot be empty. Previous name retained.');
+    expect(screen.getByRole('button', { name: 'Rename tier S' })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Rename tier S' }));
+    await user.clear(screen.getByLabelText('Name for tier S'));
+    await user.type(screen.getByLabelText('Name for tier S'), 'Draft');
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Rename tier S' })).toHaveFocus();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).tiers[0]).toMatchObject({ name: 'S', color: '#e5a295' });
+    await user.click(screen.getByRole('button', { name: 'Rename tier S' }));
+    await user.clear(screen.getByLabelText('Name for tier S'));
+    await user.type(screen.getByLabelText('Name for tier S'), '  Best   books  ');
     await user.tab();
-    fireEvent.change(within(dialog).getByLabelText('Color for tier Favorites'), { target: { value: '#aabbcc' } });
-    await user.click(within(dialog).getByLabelText('Move tier Favorites down'));
-    expect(within(dialog).getByLabelText('Name for tier 2')).toHaveValue('Favorites');
-    await user.click(within(dialog).getByRole('button', { name: '+ Add a tier' }));
-    expect(within(dialog).getAllByRole('textbox')).toHaveLength(7);
-    await user.click(within(dialog).getByLabelText('Delete tier Favorites'));
-    expect(within(dialog).getAllByRole('textbox')).toHaveLength(6);
-    await user.click(within(dialog).getByRole('button', { name: 'Done' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rename tier Best books' })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).tiers[0].name).toBe('Best books');
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+  });
+
+  it('confirms deletion through the question mark and resets it on outside clicks', async () => {
+    let board = importBooks(createBoard(), 'One\nTwo\nThree');
+    const [one, two, three] = board.books;
+    one.coverSelection = { kind: 'placeholder' };
+    board = moveBook(moveBook(board, one.id, 'tier-S'), two.id, 'tier-S');
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Delete tier S' }));
+    const confirmation = screen.getByRole('button', { name: 'Confirm deletion of tier S' });
+    expect(confirmation).toHaveTextContent('?');
+    expect(confirmation).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('heading', { name: 'Rank the books' }));
+    expect(screen.getByRole('button', { name: 'Delete tier S' })).not.toHaveTextContent('?');
+    expect(screen.getByRole('region', { name: 'Tier S' })).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).gallery).toEqual([three.id]);
+    await user.click(screen.getByRole('button', { name: 'Delete tier S' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm deletion of tier S' }));
+    expect(screen.queryByRole('region', { name: 'Tier S' })).not.toBeInTheDocument();
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY)!);
+    expect(saved.gallery).toEqual([three.id, one.id, two.id]);
+    expect(saved.books).toEqual(board.books);
+  });
+
+  it('cancels delete confirmation from the same tier, another delete button, or Escape', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Delete tier S' }));
+    await user.click(screen.getByLabelText('Color for tier S'));
+    expect(screen.queryByRole('button', { name: 'Confirm deletion of tier S' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Delete tier S' }));
+    await user.click(screen.getByRole('button', { name: 'Delete tier A' }));
+    expect(screen.getByRole('button', { name: 'Delete tier S' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirm deletion of tier A' })).toHaveTextContent('?');
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('button', { name: 'Delete tier A' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Tier S' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Tier A' })).toBeInTheDocument();
+  });
+
+  it('keeps the last tier and supports insertion at the start and end', async () => {
+    const board = createBoard();
+    board.tiers = board.tiers.slice(0, 1);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(board));
+    const user = userEvent.setup();
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Delete tier S' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Insert tier before S' }));
+    expect(screen.getByRole('textbox', { name: 'Name for tier New tier' })).toHaveFocus();
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'Insert tier after S' }));
+    expect(screen.getByRole('textbox', { name: 'Name for tier New tier' })).toHaveFocus();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).tiers.map((tier: { name: string }) => tier.name)).toEqual([
+      'New tier',
+      'S',
+      'New tier',
+    ]);
   });
 });

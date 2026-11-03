@@ -796,6 +796,7 @@ main {
 }
 
 .tier-row {
+  position: relative;
   display: flex;
   border-bottom: 1px solid var(--row-line);
   min-height: 143px;
@@ -806,6 +807,7 @@ main {
 }
 
 .tier-label {
+  position: relative;
   flex: 0 0 115px;
   display: flex;
   flex-direction: column;
@@ -826,7 +828,14 @@ main {
   width: 100%;
 }
 
-.tier-label span {
+.tier-label .tier-name {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+}
+
+.tier-label > span {
   font-size: 9px;
   opacity: 0.75;
   margin-top: 9px;
@@ -923,59 +932,191 @@ main {
   margin-top: 10px;
 }
 
-.muted,
-.settings-note {
+.muted {
   font-size: 12px;
   color: var(--muted);
   margin: 14px 0 24px;
 }
 
-.tier-editor {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  padding: 14px;
-  border-radius: 6px;
-  margin-bottom: 12px;
+.interactive-tier-label {
+  padding: 28px 6px 26px;
 }
 
-.tier-editor-fields {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.tier-hover-control {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
 }
 
-.tier-editor input[type='color'] {
-  width: 42px;
-  height: 40px;
-  padding: 2px;
-  border: 1px solid var(--line);
+.interactive-tier-label:hover .tier-hover-control,
+.interactive-tier-label:focus-within .tier-hover-control {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tier-name-button,
+.tier-name-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 2px;
+  border: 0;
   border-radius: 4px;
   background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: center;
+  white-space: normal;
 }
 
-.tier-name-field {
-  font-size: 10px;
-  color: var(--muted);
-  display: grid;
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
+.interactive-tier-label:hover .tier-name-button,
+.tier-name-button:focus-visible,
+.tier-name-input {
+  background: #ffffff30;
+  filter: none;
 }
 
-.tier-name-field input {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: var(--input);
-  padding: 6px 8px;
-  color: var(--input-text);
-  font-size: 14px;
+.tier-name-input {
+  field-sizing: content;
+  resize: none;
+  overflow: hidden;
 }
 
-.tier-editor-actions {
+.tier-name-button:focus-visible,
+.tier-name-input:focus-visible {
+  outline: none;
+}
+
+.tier-title-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 12px;
+  align-items: center;
+  gap: 4px;
+}
+
+.tier-color-picker,
+.tier-delete-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #342e2c30;
+  border-radius: 5px;
+  background: #ffffff20;
+  color: inherit;
+  cursor: pointer;
+}
+
+.tier-color-picker:hover,
+.tier-delete-button:hover {
+  background: #ffffff50;
+}
+
+.tier-color-picker:focus-within,
+.tier-delete-button:focus-visible {
+  outline: 1px solid #342e2c66;
+  outline-offset: 2px;
+}
+
+.tier-color-picker input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.tier-title-detail {
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+}
+
+.tier-title-detail > * {
+  grid-area: 1 / 1;
+}
+
+.tier-book-count {
+  font-size: 9px;
+  opacity: 0.75;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.interactive-tier-label:hover .tier-book-count,
+.interactive-tier-label:focus-within .tier-book-count {
+  opacity: 0;
+}
+
+.tier-delete-button span {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tier-name-error {
+  width: 100%;
+  margin-top: 4px;
+  font-size: 10px;
+  color: #70251c;
+}
+
+.tier-insert {
+  position: absolute;
+  top: -13px;
+  left: 0;
+  z-index: 2;
+  width: 115px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+}
+
+.tier-insert:hover,
+.tier-insert:focus-visible {
+  opacity: 1;
+}
+
+.tier-insert span {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--control-line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.tier-insert-first {
+  top: 0;
+}
+
+.tier-insert-last {
+  top: auto;
+  bottom: 0;
+}
+
+@media (hover: none) {
+  .tier-book-count {
+    opacity: 0;
+  }
+
+  .tier-hover-control {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .tier-insert {
+    opacity: 1;
+  }
 }
 
 .text-button {
@@ -1350,10 +1491,6 @@ main {
     width: 100%;
   }
 
-  .board-toolbar > .secondary-button {
-    flex: 1;
-  }
-
   .tier-label {
     flex-basis: 65px;
     padding: 12px 5px;
@@ -1361,6 +1498,14 @@ main {
 
   .tier-label h3 {
     font-size: 28px;
+  }
+
+  .interactive-tier-label {
+    padding: 28px 4px 26px;
+  }
+
+  .tier-insert {
+    width: 65px;
   }
 
   .book-zone {

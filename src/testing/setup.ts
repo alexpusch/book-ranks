@@ -5,6 +5,13 @@ import { afterEach, beforeEach, vi } from 'vitest';
 afterEach(cleanup);
 
 beforeEach(() => {
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   window.history.replaceState(null, '', '/');
   vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36');
   vi.stubGlobal(
