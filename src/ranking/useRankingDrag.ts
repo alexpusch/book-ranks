@@ -5,10 +5,12 @@ import {
   TouchSensor,
   rectIntersection,
   pointerWithin,
+  closestCenter,
   useSensor,
   useSensors,
   type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
@@ -17,11 +19,16 @@ import { GALLERY, booksAt, locationOf, moveBook, type Board, type BoardChange } 
 const collisionDetection: CollisionDetection = (args) => {
   if (args.pointerCoordinates) {
     const hits = pointerWithin(args);
-    const hit =
-      hits.find(
-        (item) => args.droppableContainers.find((container) => container.id === item.id)?.data.current?.kind === 'book',
-      ) ?? hits[0];
-    return hit ? [hit] : [];
+    const bookHit = hits.find(
+      (item) => args.droppableContainers.find((container) => container.id === item.id)?.data.current?.kind === 'book',
+    );
+    if (bookHit) return [bookHit];
+    const zoneHit = hits[0];
+    if (!zoneHit) return [];
+    const books = args.droppableContainers.filter(
+      (container) => container.data.current?.kind === 'book' && container.data.current.location === zoneHit.id,
+    );
+    return books.length ? closestCenter({ ...args, droppableContainers: books }).slice(0, 1) : [zoneHit];
   }
   return rectIntersection(args).slice(0, 1);
 };
@@ -33,6 +40,10 @@ export function useRankingDrag(
   onError: (error: unknown) => void,
 ) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ id: string; destination: string; index: number } | null>(null);
+  const previewBoard = preview
+    ? moveBook(boardRef.current, preview.id, preview.destination, preview.index)
+    : boardRef.current;
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, {
@@ -55,11 +66,33 @@ export function useRankingDrag(
     }
   }
 
+  function onDragOver({ active, over }: DragOverEvent) {
+    // Keep the keyboard's focused node mounted; only pointer drags move between zones during preview.
+    if (!activeId || !over || active.id === over.id) return;
+    try {
+      const id = String(active.id);
+      const overId = String(over.id);
+      const overBook = previewBoard.books.some((book) => book.id === overId);
+      const destination = overBook ? locationOf(previewBoard, overId) : overId;
+      const target = booksAt(previewBoard, destination);
+      if (locationOf(previewBoard, id) === destination) {
+        if (preview && !overBook && target.indexOf(id) !== target.length - 1)
+          setPreview({ id, destination, index: target.length - 1 });
+        return;
+      }
+      const index = overBook ? target.indexOf(overId) : target.length;
+      setPreview({ id, destination, index });
+    } catch (error) {
+      onError(error);
+    }
+  }
+
   function onDragEnd({ active, over }: DragEndEvent) {
     setActiveId(null);
-    if (!over || active.id === over.id) return;
+    setPreview(null);
+    if (!over || (active.id === over.id && !preview)) return;
     try {
-      const current = boardRef.current;
+      const current = previewBoard;
       const id = String(active.id);
       const overId = String(over.id);
       const overBook = current.books.some((book) => book.id === overId);
@@ -81,15 +114,21 @@ export function useRankingDrag(
     ) {
       focused.blur();
     }
+    setPreview(null);
     setActiveId(keyboard ? null : String(active.id));
   }
 
   return {
     sensors,
     collisionDetection,
+    previewBoard,
     activeBook: boardRef.current.books.find((book) => book.id === activeId),
     onDragStart,
+    onDragOver,
     onDragEnd,
-    onDragCancel: () => setActiveId(null),
+    onDragCancel: () => {
+      setActiveId(null);
+      setPreview(null);
+    },
   };
 }

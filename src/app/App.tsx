@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DndContext, DragOverlay } from '@dnd-kit/core';
+import { DndContext, DragOverlay, MeasuringStrategy } from '@dnd-kit/core';
 import { BookContent } from '../books/BookContent';
 import { BookEntry } from '../books/BookEntry';
 import { BookProvider } from '../books/BookProvider';
@@ -34,12 +34,8 @@ export function App() {
   const [exporting, setExporting] = useState(false);
   const [coverExportFailed, setCoverExportFailed] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
-  const { sensors, collisionDetection, activeBook, onDragStart, onDragEnd, onDragCancel } = useRankingDrag(
-    boardRef,
-    change,
-    setNotice,
-    (error) => setActionError(errorMessage(error)),
-  );
+  const { sensors, collisionDetection, previewBoard, activeBook, onDragStart, onDragOver, onDragEnd, onDragCancel } =
+    useRankingDrag(boardRef, change, setNotice, (error) => setActionError(errorMessage(error)));
 
   useEffect(() => {
     document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
@@ -89,12 +85,14 @@ export function App() {
         <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}
+          measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
           onDragStart={onDragStart}
+          onDragOver={onDragOver}
           onDragEnd={onDragEnd}
           onDragCancel={onDragCancel}
         >
           <Gallery
-            board={board}
+            board={previewBoard}
             onClear={() => {
               if (change(clearGallery)) setNotice('All unranked books removed from your reading pile.');
             }}
@@ -184,7 +182,7 @@ export function App() {
               </div>
             </div>
             <RankingBoard
-              board={board}
+              board={previewBoard}
               onChange={change}
               onRemove={(id) => {
                 if (change((current) => moveBook(current, id, GALLERY)))

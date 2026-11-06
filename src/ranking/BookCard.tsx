@@ -24,7 +24,7 @@ export function BookCard({ book, location, onRemove }: BookCardProps) {
     <article
       className={`book-card ${isDragging ? 'is-dragging' : ''}`}
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
       data-book-id={book.id}
       onPointerEnter={(event) => {
         if (event.pointerType !== 'touch') hover(event.currentTarget);

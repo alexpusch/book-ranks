@@ -589,7 +589,7 @@ test('drop zones stay highlighted over book cards and empty space throughout a d
   if (!zone) throw new Error('Target tier is not visible.');
   await page.mouse.move(zone.x + zone.width - 20, zone.y + 40, { steps: 16 });
   await expect(tier).toHaveClass(/drop-over/u);
-  const card = await tier.getByRole('article').boundingBox();
+  const card = await tier.getByRole('article', { name: 'Ranked book by Unknown author', exact: true }).boundingBox();
   if (!card) throw new Error('Target card is not visible.');
   await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2, {
     steps: 16,
