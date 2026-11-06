@@ -71,12 +71,24 @@ export function useRankingDrag(
     }
   }
 
+  function onDragStart({ active, activatorEvent }: DragStartEvent) {
+    const keyboard = activatorEvent instanceof KeyboardEvent;
+    const focused = document.activeElement;
+    if (
+      !keyboard &&
+      focused instanceof HTMLElement &&
+      focused.closest('[data-book-id]')?.getAttribute('data-book-id') === String(active.id)
+    ) {
+      focused.blur();
+    }
+    setActiveId(keyboard ? null : String(active.id));
+  }
+
   return {
     sensors,
     collisionDetection,
     activeBook: boardRef.current.books.find((book) => book.id === activeId),
-    onDragStart: ({ active, activatorEvent }: DragStartEvent) =>
-      setActiveId(activatorEvent instanceof KeyboardEvent ? null : String(active.id)),
+    onDragStart,
     onDragEnd,
     onDragCancel: () => setActiveId(null),
   };

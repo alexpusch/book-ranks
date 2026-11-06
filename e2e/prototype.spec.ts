@@ -636,6 +636,51 @@ test('drop zones stay highlighted over book cards and empty space throughout a d
   await expect(page.locator('.drop-over')).toHaveCount(0);
 });
 
+for (const destination of ['Tier S', 'Tier A', 'Your books', 'outside', 'cancel']) {
+  test(`pointer drag releases the card hover view without another click: ${destination}`, async ({ page }) => {
+    let board = importBooks(createBoard(), 'Moving book');
+    board = moveBook(board, board.gallery[0], 'tier-S');
+    await openBoard(page, board);
+    const card = page.getByRole('article', { name: 'Moving book by Unknown author', exact: true });
+    const handle = card.getByRole('button', { name: 'Drag Moving book', exact: true });
+    const target =
+      destination === 'outside' || destination === 'cancel'
+        ? page.getByRole('heading', { name: 'Rank the books', exact: true })
+        : page.getByRole('region', { name: destination, exact: true }).locator('.book-zone');
+    if (destination === 'cancel') {
+      await card.hover();
+      const start = await handle.boundingBox();
+      if (!start) throw new Error('Drag source is not visible.');
+      await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(start.x + start.width / 2 + 10, start.y + start.height / 2, { steps: 3 });
+      await expect(page.locator('.drag-preview')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await page.mouse.up();
+    } else {
+      await drag(page, handle, target);
+    }
+    await expect(page.locator('.drag-preview')).toHaveCount(0);
+    await page.mouse.move(0, 0);
+    await expect(page.locator('.is-dragging')).toHaveCount(0);
+    await expect(handle).not.toBeFocused();
+    await expect(card.locator('.card-actions')).toHaveCSS('opacity', '0');
+    await expect(card.locator('.book-content')).toHaveCSS('opacity', '1');
+    await card.hover();
+    await expect(card.locator('.card-actions')).toHaveCSS('opacity', '1');
+    await page.mouse.move(0, 0);
+    await handle.focus();
+    await page.keyboard.press('Space', { delay: 50 });
+    await expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Space', { delay: 50 });
+    await expect(handle).toBeFocused();
+    await expect(card.locator('.card-actions')).toHaveCSS('opacity', '1');
+    await page.keyboard.press('Space', { delay: 50 });
+    await page.keyboard.press('Escape');
+    await expect(handle).toBeFocused();
+  });
+}
+
 test('hover and keyboard focus reveal a drag zone above edit and delete buttons', async ({ page }) => {
   let board = importBooks(createBoard(), 'Gallery book\nRanked book');
   board = moveBook(board, board.gallery[1], 'tier-S');
